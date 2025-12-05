@@ -21,29 +21,28 @@
 find_sequences_below <- function(x, threshold, min_length = 3, min_start_index = 1) {
   # Convert to logical vector: TRUE where x < threshold
   below <- x < threshold
-  
+
   # Get run-length encoding of TRUE/FALSE segments
   rle_x <- rle(below)
-  
+
   # Identify runs that are TRUE and long enough
   long_runs <- which(rle_x$values & rle_x$lengths >= min_length)
-  
+
   # Convert RLE positions back to original indices
   if (length(long_runs) == 0) return(list())
-  
+
   ends <- cumsum(rle_x$lengths)
   starts <- ends - rle_x$lengths + 1
-  
+
   # Build list of index sequences
   result <- lapply(long_runs, function(i) seq(starts[i], ends[i]))
-  
+
   # Filter by min_start_index safely
   keep <- vapply(result, function(idx) min(idx) >= min_start_index, logical(1))
   result <- result[keep]
-  
+
   # Return empty list if nothing passes filter
   if (length(result) == 0) return(list())
-  
+
   return(result)
 }
-
