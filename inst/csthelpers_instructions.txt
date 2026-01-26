@@ -1,0 +1,252 @@
+CONTEXT
+You are modifying an R package repo (csthelpers). Work in-place from the package root.
+
+GOAL
+Improve correctness, readability, maintainability, numerical stability, and testability with minimal, surgical changes.
+
+HARD CONSTRAINTS (NON-NEGOTIABLE)
+- Keep all files UTF-8.
+- Do not change exported function names, arguments, defaults, or return structures unless explicitly instructed.
+- Preserve numerical outputs within tolerance 1e-12 unless methodology changes are explicitly requested.
+- Do not add new external dependencies. Do not require Suggests packages at runtime. If unavoidable, guard with requireNamespace() and justify.
+- Do not introduce purrr or functional-programming rewrites; use explicit for loops and base R idioms.
+- Preserve deterministic behavior; control randomness/seeds explicitly where relevant.
+- Minimal diff: modify only what is necessary; no sweeping refactors or style-only reformatting. Do not rename/move files unless instructed.
+- Do not silently change user-visible outputs, warnings, or errors; document any necessary changes in the final summary.
+- Do not silently drop columns/fields/rows.
+
+NON-INTERACTIVE EXECUTION (MANDATORY)
+- Execute end-to-end in a single pass without questions or confirmations.
+- Do not provide interim progress updates.
+- If ambiguous, apply the smallest conservative assumption consistent with package conventions and document it at the end.
+- Update tests when behavior changes or coverage gaps exist.
+- Run tests at the end; stop only when requested changes are implemented and tests pass (or only external/irreproducible failures remain).
+
+STYLE & STRUCTURE
+- Prefer guard clauses/early returns; explicit type/length checks (use existing helpers where available).
+- Avoid deep nesting; extract helpers only when it materially improves readability.
+- Avoid asymptotic regressions; preallocate; avoid O(n²) patterns on time-series data.
+
+DOCUMENTATION
+- Exported functions:
+  Update roxygen2 to match behavior exactly.
+  - @description: single, precise paragraph
+  - @details: key assumptions and edge cases (brief)
+  - @param: precise types, dimensions, units, NA handling
+  - @return: exact structure, classes, and fields
+  - @examples: minimal and fast; wrap expensive code in \dontrun{}
+- Internal functions:
+  Minimal documentation; use @keywords internal only when necessary.
+- Do not invent parameters, defaults, or behavior.
+
+TESTS
+- Tests must be deterministic; no network, large fixtures, or uncontrolled randomness.
+- Cover input validation, NA handling, empty/constant series, methodological consistency, return structure.
+- Group tests by function/group; at top of each test file list functions under test with relative paths.
+
+FINAL OUTPUT (ONCE COMPLETE)
+- Bullet summary: what changed, why, risks/assumptions.
+- List of files changed.
+- Explicit design choices.
+- Report remaining issues only if external/irreproducible.
+
+TASK
+PATCH all R-CMD-CHECK issues identified below:
+
+── R CMD check results ─────────────────────────────────────────────── hydrokit 0.0.0.9000 ────
+Duration: 25.4s
+
+❯ checking examples ... ERROR
+  Running examples in 'hydrokit-Ex.R' failed
+  The error most likely occurred in:
+  
+  > base::assign(".ptime", proc.time(), pos = "CheckExEnv")
+  > ### Name: calculate_hydro_metrics
+  > ### Title: Calculate Hydrological Metrics from Daily Discharge
+  > ### Aliases: calculate_hydro_metrics
+  > 
+  > ### ** Examples
+  > 
+  > date <- seq.Date(as.Date("2001-01-01"), as.Date("2002-12-31"), by = "day")
+  > Q <- 2 + sin(seq_along(date) * 2 * pi / 365)
+  > out <- calculate_hydro_metrics(Q, date, metrics = c("amax1d", "amin1d"))
+  Error in loadNamespace(x) : there is no package called 'tibble'
+  Calls: calculate_hydro_metrics ... loadNamespace -> withRestarts -> withOneRestart -> doWithOneRestart
+  Execution halted
+
+❯ checking tests ...
+  See below...
+
+❯ checking code files for non-ASCII characters ... WARNING
+  Found the following file with non-ASCII characters:
+    R/eflow_erfa.R
+  Portable packages must use only ASCII characters in their R code and
+  NAMESPACE directives, except perhaps in comments.
+  Use \uxxxx escapes for other characters.
+  Function 'tools::showNonASCIIfile' can help in finding non-ASCII
+  characters in files.
+
+❯ checking dependencies in R code ... WARNING
+  '::' or ':::' imports not declared from:
+    'dplyr' 'lubridate' 'tibble' 'zoo'
+  Namespace in Imports field not imported from: 'utils'
+    All declared Imports should be used.
+
+❯ checking for unstated dependencies in 'tests' ... WARNING
+  '::' or ':::' import not declared from: 'lubridate'
+
+❯ checking DESCRIPTION meta-information ... NOTE
+  Malformed Description field: should contain one or more complete sentences.
+
+❯ checking package subdirectories ... NOTE
+  Problems with news in 'NEWS.md':
+  No news entries found.
+
+❯ checking R code for possible problems ... NOTE
+  .hydro_empty_result: no visible binding for global variable
+    'metric_key'
+  calculate_hydro_metrics : calc_site: no visible binding for global
+    variable 'site'
+  calculate_hydro_metrics : calc_site: no visible binding for global
+    variable 'metric_key'
+  calculate_hydro_metrics : calc_site: no visible global function
+    definition for '%>%'
+  calculate_hydro_metrics : calc_site: no visible binding for global
+    variable 'metric_id'
+  calculate_hydro_metrics : calc_site: no visible binding for global
+    variable 'year'
+  evaluate_erfa_class: no visible global function definition for '%>%'
+  evaluate_erfa_class: no visible binding for global variable '.data'
+  evaluate_erfa_class: no visible binding for global variable 'value'
+  evaluate_erfa_class: no visible binding for global variable
+    'value_base'
+  evaluate_erfa_class: no visible binding for global variable
+    'value_scen'
+  evaluate_erfa_class: no visible binding for global variable
+    'pct_change'
+  evaluate_erfa_class: no visible binding for global variable 'group'
+  evaluate_erfa_class: no visible binding for global variable
+    'outside_range'
+  evaluate_erfa_class: no visible binding for global variable 'n_outside'
+  evaluate_erfa_class: no visible binding for global variable 'n_total'
+  evaluate_erfa_class: no visible binding for global variable
+    'risk_class'
+  evaluate_erfa_class: no visible binding for global variable
+    'perc_outside'
+  evaluate_erfa_class: no visible binding for global variable
+    'risk_label'
+  Undefined global functions or variables:
+    %>% .data group metric_id metric_key n_outside n_total outside_range
+    pct_change perc_outside risk_class risk_label site value value_base
+    value_scen year
+
+── Test failures ──────────────────────────────────────────────────────────────── testthat ────
+
+> # This file is part of the standard setup for testthat.
+> # It is recommended that you do not modify it.
+> #
+> # Where should you do additional test configuration?
+> # Learn more about the roles of various files in:
+> # * https://r-pkgs.org/testing-design.html#sec-tests-files-overview
+> # * https://testthat.r-lib.org/articles/special-files.html
+> 
+> library(testthat)
+> library(hydrokit)
+> 
+> test_check("hydrokit")
+Saving _problems/test-hydro_metrics-registry_compute-21.R
+Saving _problems/test-hydro_metrics-registry_compute-111.R
+Saving _problems/test-hydro_metrics-registry_compute-180.R
+[ FAIL 4 | WARN 0 | SKIP 0 | PASS 15 ]
+
+══ Failed tests ════════════════════════════════════════════════════════════════
+── Error ('test-hydro_metrics-registry_compute.R:21:3'): registry compute matches annual output for a single year ──
+<packageNotFoundError/error/condition>
+Error in `loadNamespace(x)`: there is no package called 'lubridate'
+Backtrace:
+    ▆
+ 1. └─base::loadNamespace(x) at test-hydro_metrics-registry_compute.R:21:3
+ 2.   └─base::withRestarts(stop(cond), retry_loadNamespace = function() NULL)
+ 3.     └─base (local) withOneRestart(expr, restarts[[1L]])
+ 4.       └─base (local) doWithOneRestart(return(expr), restart)
+── Error ('test-hydro_metrics-registry_compute.R:111:3'): summary outputs for ERFA base metrics match registry annual compute ──
+<packageNotFoundError/error/condition>
+Error in `loadNamespace(x)`: there is no package called 'tibble'
+Backtrace:
+    ▆
+ 1. ├─hydrokit:::.hydro_metric_registry_base() at test-hydro_metrics-registry_compute.R:111:3
+ 2. └─base::loadNamespace(x)
+ 3.   └─base::withRestarts(stop(cond), retry_loadNamespace = function() NULL)
+ 4.     └─base (local) withOneRestart(expr, restarts[[1L]])
+ 5.       └─base (local) doWithOneRestart(return(expr), restart)
+── Error ('test-hydro_metrics-registry_compute.R:175:3'): ERFA output structure, metric_id mapping, and ordering are stable ──
+<packageNotFoundError/error/condition>
+Error in `loadNamespace(x)`: there is no package called 'tibble'
+Backtrace:
+    ▆
+ 1. ├─hydrokit:::calculate_hydro_metrics(...) at test-hydro_metrics-registry_compute.R:175:3
+ 2. │ └─hydrokit:::.hydro_validate_registry(strict = TRUE)
+ 3. │   └─hydrokit:::.hydro_metric_registry_base()
+ 4. └─base::loadNamespace(x)
+ 5.   └─base::withRestarts(stop(cond), retry_loadNamespace = function() NULL)
+ 6.     └─base (local) withOneRestart(expr, restarts[[1L]])
+ 7.       └─base (local) doWithOneRestart(return(expr), restart)
+── Error ('test-hydro_metrics-registry_compute.R:200:3'): registry validation passes in strict mode ──
+<packageNotFoundError/error/condition>
+Error in `loadNamespace(x)`: there is no package called 'tibble'
+Backtrace:
+     ▆
+  1. ├─testthat::expect_silent(hydrokit:::.hydro_validate_registry(strict = TRUE)) at test-hydro_metrics-registry_compute.R:200:3
+  2. │ └─testthat:::quasi_capture(enquo(object), NULL, evaluate_promise)
+  3. │   ├─testthat (local) .capture(...)
+  4. │   │ ├─withr::with_output_sink(...)
+  5. │   │ │ └─base::force(code)
+  6. │   │ ├─base::withCallingHandlers(...)
+  7. │   │ └─base::withVisible(code)
+  8. │   └─rlang::eval_bare(quo_get_expr(.quo), quo_get_env(.quo))
+  9. ├─hydrokit:::.hydro_validate_registry(strict = TRUE)
+ 10. │ └─hydrokit:::.hydro_metric_registry_base()
+ 11. └─base::loadNamespace(x)
+ 12.   └─base::withRestarts(stop(cond), retry_loadNamespace = function() NULL)
+ 13.     └─base (local) withOneRestart(expr, restarts[[1L]])
+ 14.       └─base (local) doWithOneRestart(return(expr), restart)
+
+[ FAIL 4 | WARN 0 | SKIP 0 | PASS 15 ]
+Error:
+! Test failures.
+Execution halted
+
+2 errors ✖ | 3 warnings ✖ | 3 notes ✖
+Error: R CMD check found ERRORs
+Execution halted
+
+Exited with status 1.
+
+
+
+
+
+
+
+ 
+
+SCOPE (FILES)
+- hydro_metrics.R -> calculate_hydro_metrics()
+- evaluate_erfa.R -> evaluate_erfa_class()
+
+
+
+
+
+IMPLEMENTATION REQUIREMENTS
+- [Concrete steps, in order]
+- [Any invariants or numerical tolerances]
+- [What to keep identical]
+- [What new tests to add/update]
+- [Any test commands to run]
+
+DONE CRITERIA
+- New tests pass.
+- Existing tests pass.
+- No change to exported function signatures or return structures.
+
