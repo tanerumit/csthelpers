@@ -8,12 +8,15 @@ sos_radialplot(
   data,
   axis_col,
   panel_col,
-  panel_var = NULL,
   value_col,
-  cat_colors,
   color_col,
+  cat_colors,
   radial_breaks = NULL,
-  start_angle = 90
+  start_angle = 90,
+  direction = 1,
+  facet_nrow = NULL,
+  legend_title = "Category",
+  spoke_to_max = TRUE
 )
 }
 \arguments{
@@ -23,21 +26,30 @@ sos_radialplot(
 
 \item{panel_col}{Variable used to facet panels (e.g., `scenario`).}
 
-\item{panel_var}{Optional variable for nested paneling. Currently unused; retained
-for interface stability.}
+\item{value_col}{Numeric variable specifying the radial magnitude (bar length).
+`NA` values are permitted and will result in no bar being drawn for that
+observation; a warning is issued if any `NA`s are present.}
 
-\item{value_col}{Numeric variable specifying the radial magnitude (bar length).}
+\item{color_col}{Variable defining the categorical fill grouping.}
 
 \item{cat_colors}{Named character vector defining fill colors for `color_col` levels.
 Names must match the factor levels to enforce consistent ordering.}
-
-\item{color_col}{Variable defining the categorical fill grouping.}
 
 \item{radial_breaks}{Optional numeric vector of radial breaks (must include `0`).
 If `NULL`, breaks are computed via `pretty()`.}
 
 \item{start_angle}{Numeric. Angular position (degrees) of the `"GAP"` sector where
-tick labels are printed. Default is `90` (top).}
+tick labels are printed. Default is `90` (top). Values are normalized to `[0, 360)`.}
+
+\item{direction}{Numeric. `1` for counter-clockwise (default), `-1` for clockwise.}
+
+\item{facet_nrow}{Integer. Number of rows for facet layout. Default `NULL` allows
+`facet_wrap()` to choose automatically.}
+
+\item{legend_title}{Character. Title for the fill legend. Default is `"Category"`.}
+
+\item{spoke_to_max}{Logical. If `TRUE` (default), dashed helper spokes extend to
+`max(radial_breaks)`. If `FALSE`, spokes extend only to each bar's value.}
 }
 \value{
 A `ggplot` object.
@@ -68,7 +80,7 @@ df <- data.frame(
   risk_class = rep(c("Low", "Low", "Medium", "No", "Low", "Low"), times = 4)
 )
 
-cat_colors <- c("No"="green", "Low"="yellow", "Medium"="orange", "High"="red")
+cat_colors <- c("No" = "green", "Low" = "yellow", "Medium" = "orange", "High" = "red")
 
 sos_radialplot(
   data = df,
@@ -78,7 +90,8 @@ sos_radialplot(
   color_col = risk_class,
   cat_colors = cat_colors,
   radial_breaks = seq(0, 50, 10),
-  start_angle = 90
+  start_angle = 90,
+  legend_title = "Risk Class"
 )
 }
 

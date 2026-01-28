@@ -8,29 +8,42 @@ plot_basin_map(
   basins_sf = NULL,
   rivers_sf = NULL,
   points_sf = NULL,
+  stream_order_col = "strord",
+  label_col = "name",
   main_stem_order = 2,
   add_scale = FALSE,
-  add_north = FALSE
+  add_north = FALSE,
+  show_river_legend = FALSE
 )
 }
 \arguments{
 \item{basins_sf}{`sf` object (polygons). Optional basin boundaries.}
 
 \item{rivers_sf}{`sf` object (lines). Optional river network. Must contain a
-numeric column named `strord` (stream order).}
+numeric column for stream order (see `stream_order_col`).}
 
 \item{points_sf}{`sf` object (points). Optional point layer. Must contain a
-column named `name` for labels.}
+column for labels (see `label_col`).}
 
-\item{main_stem_order}{Numeric scalar. Minimum stream order threshold used
-for filtering rivers: rows with `strord > main_stem_order` are plotted.}
+\item{stream_order_col}{Character scalar. Name of the numeric stream order
+column in `rivers_sf`. Default is `"strord"`.}
+
+\item{label_col}{Character scalar. Name of the label column in `points_sf`.
+Default is `"name"`.}
+
+\item{main_stem_order}{Numeric scalar. Minimum stream order threshold for
+filtering rivers. Rows with stream order >= this value are plotted
+(inclusive).}
 
 \item{add_scale}{Logical. If `TRUE`, adds `ggspatial::annotation_scale()`.}
 
 \item{add_north}{Logical. If `TRUE`, adds `ggspatial::annotation_north_arrow()`.}
+
+\item{show_river_legend}{Logical. If `TRUE`, displays a legend for river
+line widths (stream order). Default is `FALSE`.}
 }
 \value{
-A `ggplot` object.
+A `ggplot` object with an additional attribute `"bbox"` containing
 }
 \description{
 Creates a simple basin overview map using `geom_sf()`, with optional
@@ -44,6 +57,9 @@ CRS of the first non-`NULL` object among `basins_sf`, `rivers_sf`, `points_sf`.
 \dontrun{
 p <- plot_basin_map(basins_sf, rivers_sf, points_sf, main_stem_order = 2)
 print(p)
+
+# Access the bounding box
+attr(p, "bbox")
 }
 
 }

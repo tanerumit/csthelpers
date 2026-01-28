@@ -1,3 +1,29 @@
+# =============================================================================
+# GCM Weighting Functions (Improved)
+# =============================================================================
+#
+# Two functions for computing climate model ensemble weights:
+# - compute_gcm_weights_by_institution(): Institution-based weighting
+# - compute_gcm_weights_by_genealogy(): Genealogy-based weighting (Kuma et al.)
+#
+# Improvements over original:
+# 1. Vectorized operations using dplyr (O(n) instead of O(n²))
+# 2. Proper tidy evaluation with .data pronoun
+# 3. Configurable output column names
+# 4. Weight sum validation diagnostics
+# 5. Defensive checks for edge cases
+# 6. Safer tapply/split handling
+#
+# Dependencies: dplyr, rlang
+# =============================================================================
+
+#' @importFrom dplyr group_by mutate ungroup n across all_of left_join distinct
+#' @importFrom rlang .data sym
+
+# =============================================================================
+# compute_gcm_weights_by_institution
+# =============================================================================
+
 #' Calculate simple institution-based weights (per scenario)
 #'
 #' @description
@@ -11,15 +37,36 @@
 #' @param institution_col Character. Institution column name. Default "institution".
 #' @param model_col Character. Model column name. Default "model".
 #' @param weight_col Character. Output weight column name. Default "w_inst".
+#' @param verbose Logical. If TRUE, prints diagnostics and validates weight sums.
 #'
 #' @return `data` with an added column `weight_col` summing to 1 within each scenario.
+#'
+#' @examples
+#' \dontrun{
+#' gcm_data <- data.frame(
+#'   model = c("ACCESS-CM2", "ACCESS-ESM1-5", "GFDL-CM4", "IPSL-CM6A-LR"),
+#'   institution = c("CSIRO", "CSIRO", "NOAA-GFDL", "IPSL"),
+#'   scenario = rep("SSP2-4.5", 4)
+#' )
+#' result <- compute_gcm_weights_by_institution(gcm_data)
+#' }
+#'
 #' @export
 compute_gcm_weights_by_institution <- function(
     data,
     scenario_col = "scenario",
     institution_col = "institution",
     model_col = "model",
-    weight_col = "w_inst") {
+    weight_col = "w_inst",
+    verbose = FALSE
+) {
+
+  # ---------------------------------------------------------------------------
+  # Input validation
+  # ---------------------------------------------------------------------------
+  if (!is.data.frame(data)) {
+    stop("'data' must be a data.frame.", call. = FALSE)
+  }
 
   required <- c(scenario_col, institution_col, model_col)
   missing <- setdiff(required, names(data))
@@ -27,50 +74,121 @@ compute_gcm_weights_by_institution <- function(
     stop("Missing required columns: ", paste(missing, collapse = ", "), call. = FALSE)
   }
 
+  if (nrow(data) == 0) {
+    warning("Input data has zero rows.", call. = FALSE)
+    data[[weight_col]] <- numeric(0)
+    return(data)
+  }
+
+  # ---------------------------------------------------------------------------
+  # Vectorized weight computation using dplyr
+  # ---------------------------------------------------------------------------
+
+  # Step 1: Build model -> institution mapping (first non-NA institution per model)
+  model_inst_map <- data |>
+    dplyr::select(
+      dplyr::all_of(c(scenario_col, model_col, institution_col))
+    ) |>
+    dplyr::filter(!is.na(.data[[institution_col]])) |>
+    dplyr::group_by(
+      dplyr::across(dplyr::all_of(c(scenario_col, model_col)))
+    ) |>
+    dplyr::summarise(
+      .inst = .data[[institution_col]][1],
+      .groups = "drop"
+    )
+
+  # Step 2: Count models per institution per scenario
+  inst_model_counts <- model_inst_map |>
+    dplyr::group_by(
+      dplyr::across(dplyr::all_of(scenario_col)),
+      .data$.inst
+    ) |>
+    dplyr::summarise(
+      .n_models_in_inst = dplyr::n(),
+      .groups = "drop"
+    )
+
+  # Step 3: Count institutions per scenario
+  inst_counts <- inst_model_counts |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(scenario_col))) |>
+    dplyr::summarise(
+      .n_inst = dplyr::n(),
+      .groups = "drop"
+    )
+
+  # Step 4: Compute model weights
+  model_weights <- model_inst_map |>
+    dplyr::left_join(inst_counts, by = scenario_col) |>
+    dplyr::left_join(inst_model_counts, by = c(scenario_col, ".inst")) |>
+    dplyr::mutate(
+      .w_model = (1 / .data$.n_inst) / .data$.n_models_in_inst
+    ) |>
+    dplyr::select(dplyr::all_of(c(scenario_col, model_col, ".w_model")))
+
+  # Step 5: Join weights back and split across rows
   df <- data
-  df[[weight_col]] <- NA_real_
+  df$.row_id <- seq_len(nrow(df))
 
-  scenarios <- sort(unique(as.character(df[[scenario_col]])))
+  df <- df |>
+    dplyr::left_join(model_weights, by = c(scenario_col, model_col)) |>
+    dplyr::group_by(
+      dplyr::across(dplyr::all_of(c(scenario_col, model_col)))
+    ) |>
+    dplyr::mutate(
+      !!weight_col := .data$.w_model / dplyr::n()
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::select(-".w_model")
 
-  for (sc in scenarios) {
-    idx_sc <- which(df[[scenario_col]] == sc)
-    df_sc <- df[idx_sc, , drop = FALSE]
+  # Handle any NA weights (models with no institution mapping)
+  na_weights <- is.na(df[[weight_col]])
+  if (any(na_weights)) {
+    # Fallback: equal weight per row within scenario for unmatched models
+    for (sc in unique(df[[scenario_col]][na_weights])) {
+      idx_sc <- which(df[[scenario_col]] == sc)
+      idx_na <- idx_sc[is.na(df[[weight_col]][idx_sc])]
+      if (length(idx_na) > 0) {
+        df[[weight_col]][idx_na] <- (1 / length(idx_sc))
+      }
+    }
+  }
 
-    # model -> institution (first non-NA)
-    inst_by_model <- tapply(df_sc[[institution_col]], df_sc[[model_col]], function(z) z[which(!is.na(z))[1]])
-    models_sc <- names(inst_by_model)
-    insts_present <- unique(unname(inst_by_model))
-    insts_present <- insts_present[!is.na(insts_present)]
-    n_inst <- length(insts_present)
+  # ---------------------------------------------------------------------------
+  # Renormalize within each scenario (numerical guard)
+  # ---------------------------------------------------------------------------
+  df <- df |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(scenario_col))) |>
+    dplyr::mutate(
+      !!weight_col := .data[[weight_col]] / sum(.data[[weight_col]], na.rm = TRUE)
+    ) |>
+    dplyr::ungroup()
 
-    if (n_inst == 0) {
-      # fallback: equal per row
-      df[[weight_col]][idx_sc] <- rep(1 / length(idx_sc), length(idx_sc))
-      next
+  # Restore original row order
+  df <- df[order(df$.row_id), , drop = FALSE]
+  df$.row_id <- NULL
+
+  # ---------------------------------------------------------------------------
+  # Validation and diagnostics
+  # ---------------------------------------------------------------------------
+  if (verbose) {
+    weight_sums <- tapply(df[[weight_col]], df[[scenario_col]], sum, na.rm = TRUE)
+    bad_sums <- names(weight_sums)[abs(weight_sums - 1) > 1e-6]
+
+    if (length(bad_sums) > 0) {
+      warning(
+        "Weights do not sum to 1 in scenarios: ",
+        paste(bad_sums, collapse = ", "),
+        call. = FALSE
+      )
     }
 
-    w_inst_total <- 1 / n_inst
-
-    # model weights
-    w_model <- numeric(length(models_sc))
-    names(w_model) <- models_sc
-
-    for (m in models_sc) {
-      inst_m <- unname(inst_by_model[m])
-      n_models_in_inst <- sum(unname(inst_by_model) == inst_m)
-      w_model[m] <- w_inst_total / n_models_in_inst
-    }
-
-    # split model weights across rows
-    for (m in models_sc) {
-      idx_m <- idx_sc[df_sc[[model_col]] == m]
-      df[[weight_col]][idx_m] <- w_model[m] / length(idx_m)
-    }
-
-    # renormalize (guard)
-    s <- sum(df[[weight_col]][idx_sc], na.rm = TRUE)
-    if (is.finite(s) && s > .Machine$double.eps) {
-      df[[weight_col]][idx_sc] <- df[[weight_col]][idx_sc] / s
+    scenarios <- unique(df[[scenario_col]])
+    for (sc in scenarios) {
+      df_sc <- df[df[[scenario_col]] == sc, , drop = FALSE]
+      n_inst <- length(unique(df_sc[[institution_col]][!is.na(df_sc[[institution_col]])]))
+      n_mod <- length(unique(df_sc[[model_col]]))
+      message(sprintf("[INSTITUTION] %s: %d institutions | %d models", sc, n_inst, n_mod))
     }
   }
 
@@ -78,8 +196,9 @@ compute_gcm_weights_by_institution <- function(
 }
 
 
-################################################################################
-
+# =============================================================================
+# compute_gcm_weights_by_genealogy
+# =============================================================================
 
 #' Compute genealogy-based model weights per SSP based on Kuma et al. 2023.
 #'
@@ -103,14 +222,26 @@ compute_gcm_weights_by_institution <- function(
 #'   - "family" (default): Equal weight per family
 #'   - "family_sqrt": Weight proportional to 1/sqrt(n_models_in_family)
 #'   - "independence": Ignore genealogy (equal weight per model)
-#' @param keep_original_model Logical. If TRUE, keep original model string and add a cleaned model field.
-#' @param verbose Logical. If TRUE, prints a short mapping/coverage summary.
+#' @param clean_col Character. Output column name for cleaned model names. Default "model_clean".
+#' @param family_col Character. Output column name for family assignment. Default "model_family".
+#' @param weight_col Character. Output column name for weights. Default "w_genealogy".
+#' @param keep_original_model Logical. If TRUE, keep original model string in "model_raw".
+#' @param verbose Logical. If TRUE, prints mapping/coverage summary and validates weights.
 #'
 #' @return
 #' `gcm_data` with added columns:
-#' - model_clean: cleaned CMIP model name used for mapping
-#' - model_family: genealogy family (from Kuma table; fallback to model_clean if unmatched)
-#' - w_genealogy: per-row weight within scenario_col; sums to 1 per scenario
+#' - `clean_col`: cleaned CMIP model name used for mapping
+#' - `family_col`: genealogy family (from Kuma table; fallback to model_clean if unmatched)
+#' - `weight_col`: per-row weight within scenario_col; sums to 1 per scenario
+#'
+#' @examples
+#' \dontrun{
+#' result <- compute_gcm_weights_by_genealogy(
+#'   gcm_data = my_gcm_data,
+#'   kuma_table = read.csv("kuma_table_s1.csv"),
+#'   method = "family"
+#' )
+#' }
 #'
 #' @export
 compute_gcm_weights_by_genealogy <- function(
@@ -120,14 +251,18 @@ compute_gcm_weights_by_genealogy <- function(
     scenario_col = "scenario",
     cmip_phase = c("CMIP6", "CMIP5", "CMIP3"),
     method = c("family", "family_sqrt", "independence"),
+    clean_col = "model_clean",
+    family_col = "model_family",
+    weight_col = "w_genealogy",
     keep_original_model = TRUE,
-    verbose = TRUE) {
+    verbose = TRUE
+) {
 
   cmip_phase <- match.arg(cmip_phase)
   method <- match.arg(method)
 
   # ---------------------------------------------------------------------------
-  # Helpers
+  # Internal helpers
   # ---------------------------------------------------------------------------
 
   .stop_if_missing <- function(df, cols, df_name) {
@@ -147,14 +282,13 @@ compute_gcm_weights_by_genealogy <- function(
   }
 
   .split_names <- function(x) {
-    # Kuma CMIP name fields are comma-separated in the CSV (as seen for IPSL)
     if (is.na(x) || !nzchar(x)) return(character(0))
     out <- unlist(strsplit(x, ",", fixed = TRUE), use.names = FALSE)
     out <- trimws(out)
     out[nzchar(out)]
   }
 
-  .build_mapping <- function(kuma_table, cmip_phase) {
+  .build_mapping <- function(kuma_table, cmip_phase, family_col_out) {
     name_col <- switch(
       cmip_phase,
       CMIP6 = "CMIP6 names",
@@ -175,185 +309,143 @@ compute_gcm_weights_by_genealogy <- function(
       family <- c(family, rep(as.character(kuma_table$Family[i]), length(nm)))
     }
 
-    # deduplicate; if duplicates occur, keep first (should be rare)
-    map <- data.frame(cmip_name = cmip_name, model_family = family, stringsAsFactors = FALSE)
+    map <- data.frame(
+      cmip_name = cmip_name,
+      stringsAsFactors = FALSE
+    )
+    map[[family_col_out]] <- family
+
+    # Deduplicate (keep first occurrence)
     map <- map[!duplicated(map$cmip_name), , drop = FALSE]
+
+    # Defensive check: ensure no duplicates remain
+    if (any(duplicated(map$cmip_name))) {
+      stop("Internal error: duplicate cmip_name entries in mapping table.", call. = FALSE)
+    }
+
     map
   }
 
-  # Family-equal weights within scenario:
-  # 1) for each scenario, compute weight per family = 1 / n_families_present
-  # 2) split equally among models in that family in that scenario
-  .compute_family_weights_per_scenario <- function(df, scenario_col) {
-    df$w_genealogy <- NA_real_
+  # ---------------------------------------------------------------------------
+  # Vectorized weight computation helpers
+  # ---------------------------------------------------------------------------
 
-    scenarios <- sort(unique(as.character(df[[scenario_col]])))
+  .compute_weights_vectorized <- function(df, scenario_col, clean_col, family_col,
+                                          weight_col, method) {
+    # Step 1: Build model -> family mapping per scenario (unique models)
+    model_fam_map <- df |>
+      dplyr::select(dplyr::all_of(c(scenario_col, clean_col, family_col))) |>
+      dplyr::distinct()
 
-    for (sc in scenarios) {
-      idx_sc <- which(df[[scenario_col]] == sc)
-      df_sc <- df[idx_sc, , drop = FALSE]
+    # Step 2: Count models per family per scenario
+    fam_model_counts <- model_fam_map |>
+      dplyr::group_by(
+        dplyr::across(dplyr::all_of(c(scenario_col, family_col)))
+      ) |>
+      dplyr::summarise(
+        .n_models_in_fam = dplyr::n(),
+        .groups = "drop"
+      )
 
-      # unique models in this scenario
-      models_sc <- unique(df_sc$model_clean)
+    # Step 3: Count families per scenario
+    fam_counts <- fam_model_counts |>
+      dplyr::group_by(dplyr::across(dplyr::all_of(scenario_col))) |>
+      dplyr::summarise(
+        .n_fam = dplyr::n(),
+        .groups = "drop"
+      )
 
-      # family per model (one value per model_clean assumed)
-      fam_by_model <- tapply(df_sc$model_family, df_sc$model_clean, function(z) z[1])
+    # Step 4: Compute family weights based on method
+    if (method == "family") {
+      # Equal weight per family
+      fam_weights <- fam_model_counts |>
+        dplyr::left_join(fam_counts, by = scenario_col) |>
+        dplyr::mutate(
+          .w_family = 1 / .data$.n_fam
+        )
+    } else if (method == "family_sqrt") {
+      # Weight proportional to 1/sqrt(n_models_in_family)
+      fam_weights <- fam_model_counts |>
+        dplyr::left_join(fam_counts, by = scenario_col) |>
+        dplyr::mutate(
+          .w_family_raw = 1 / sqrt(.data$.n_models_in_fam)
+        ) |>
+        dplyr::group_by(dplyr::across(dplyr::all_of(scenario_col))) |>
+        dplyr::mutate(
+          .w_family = .data$.w_family_raw / sum(.data$.w_family_raw)
+        ) |>
+        dplyr::ungroup() |>
+        dplyr::select(-".w_family_raw")
+    } else {
+      # independence: equal weight per model (family weight = n_models_in_fam / total_models)
+      total_models <- model_fam_map |>
+        dplyr::group_by(dplyr::across(dplyr::all_of(scenario_col))) |>
+        dplyr::summarise(.n_total = dplyr::n(), .groups = "drop")
 
-      fams_present <- unique(unname(fam_by_model[models_sc]))
-      fams_present <- fams_present[!is.na(fams_present)]
-      n_fam <- length(fams_present)
-
-      if (n_fam == 0) {
-        # Improved fallback: weight by unique models, not rows
-        w_model <- 1 / length(models_sc)
-        for (m in models_sc) {
-          idx_m <- idx_sc[df_sc$model_clean == m]
-          df$w_genealogy[idx_m] <- w_model / length(idx_m)
-        }
-        next
-      }
-
-      w_family <- 1 / n_fam
-
-      # compute model weights (per unique model)
-      w_model <- numeric(length(models_sc))
-      names(w_model) <- models_sc
-
-      for (m in models_sc) {
-        fam_m <- unname(fam_by_model[m])
-        n_models_in_fam <- sum(unname(fam_by_model[models_sc]) == fam_m)
-        w_model[m] <- w_family / n_models_in_fam
-      }
-
-      # split model weight across multiple rows per model in this scenario (members/variants)
-      for (m in models_sc) {
-        idx_m <- idx_sc[df_sc$model_clean == m]
-        n_rows_m <- length(idx_m)
-        df$w_genealogy[idx_m] <- w_model[m] / n_rows_m
-      }
-
-      # numerical guard: renormalize within scenario
-      s <- sum(df$w_genealogy[idx_sc], na.rm = TRUE)
-      if (is.finite(s) && s > .Machine$double.eps) {
-        df$w_genealogy[idx_sc] <- df$w_genealogy[idx_sc] / s
-      }
+      fam_weights <- fam_model_counts |>
+        dplyr::left_join(total_models, by = scenario_col) |>
+        dplyr::mutate(
+          .w_family = .data$.n_models_in_fam / .data$.n_total
+        ) |>
+        dplyr::select(-".n_total")
     }
 
-    df
-  }
+    # Step 5: Compute model weights (family weight / n_models_in_family)
+    model_weights <- model_fam_map |>
+      dplyr::left_join(
+        fam_weights |> dplyr::select(dplyr::all_of(c(scenario_col, family_col)),
+                                     ".n_models_in_fam", ".w_family"),
+        by = c(scenario_col, family_col)
+      ) |>
+      dplyr::mutate(
+        .w_model = .data$.w_family / .data$.n_models_in_fam
+      ) |>
+      dplyr::select(dplyr::all_of(c(scenario_col, clean_col, ".w_model")))
 
-  # Family-sqrt weights within scenario:
-  # Weight proportional to 1/sqrt(n_models_in_family)
-  .compute_family_sqrt_weights_per_scenario <- function(df, scenario_col) {
-    df$w_genealogy <- NA_real_
+    # Step 6: Join back to original data and split across rows
+    df <- df |>
+      dplyr::left_join(model_weights, by = c(scenario_col, clean_col)) |>
+      dplyr::group_by(dplyr::across(dplyr::all_of(c(scenario_col, clean_col)))) |>
+      dplyr::mutate(
+        !!weight_col := .data$.w_model / dplyr::n()
+      ) |>
+      dplyr::ungroup() |>
+      dplyr::select(-".w_model")
 
-    scenarios <- sort(unique(as.character(df[[scenario_col]])))
-
-    for (sc in scenarios) {
-      idx_sc <- which(df[[scenario_col]] == sc)
-      df_sc <- df[idx_sc, , drop = FALSE]
-
-      # unique models in this scenario
-      models_sc <- unique(df_sc$model_clean)
-
-      # family per model (one value per model_clean assumed)
-      fam_by_model <- tapply(df_sc$model_family, df_sc$model_clean, function(z) z[1])
-
-      fams_present <- unique(unname(fam_by_model[models_sc]))
-      fams_present <- fams_present[!is.na(fams_present)]
-      n_fam <- length(fams_present)
-
-      if (n_fam == 0) {
-        # Fallback: equal model weights
-        w_model <- 1 / length(models_sc)
-        for (m in models_sc) {
-          idx_m <- idx_sc[df_sc$model_clean == m]
-          df$w_genealogy[idx_m] <- w_model / length(idx_m)
-        }
-        next
-      }
-
-      # compute family weights: proportional to 1/sqrt(n_models_in_family)
-      family_weights <- numeric(length(fams_present))
-      names(family_weights) <- fams_present
-
-      for (fam in fams_present) {
-        n_models_in_fam <- sum(unname(fam_by_model[models_sc]) == fam)
-        family_weights[fam] <- 1 / sqrt(n_models_in_fam)
-      }
-
-      # normalize family weights to sum to 1
-      family_weights <- family_weights / sum(family_weights)
-
-      # compute model weights (per unique model)
-      w_model <- numeric(length(models_sc))
-      names(w_model) <- models_sc
-
-      for (m in models_sc) {
-        fam_m <- unname(fam_by_model[m])
-        n_models_in_fam <- sum(unname(fam_by_model[models_sc]) == fam_m)
-        w_model[m] <- family_weights[fam_m] / n_models_in_fam
-      }
-
-      # split model weight across multiple rows per model in this scenario (members/variants)
-      for (m in models_sc) {
-        idx_m <- idx_sc[df_sc$model_clean == m]
-        n_rows_m <- length(idx_m)
-        df$w_genealogy[idx_m] <- w_model[m] / n_rows_m
-      }
-
-      # numerical guard: renormalize within scenario
-      s <- sum(df$w_genealogy[idx_sc], na.rm = TRUE)
-      if (is.finite(s) && s > .Machine$double.eps) {
-        df$w_genealogy[idx_sc] <- df$w_genealogy[idx_sc] / s
-      }
-    }
-
-    df
-  }
-
-  # Independence weights within scenario:
-  # Equal weight per model (ignores genealogy)
-  .compute_independence_weights_per_scenario <- function(df, scenario_col) {
-    df$w_genealogy <- NA_real_
-
-    scenarios <- sort(unique(as.character(df[[scenario_col]])))
-
-    for (sc in scenarios) {
-      idx_sc <- which(df[[scenario_col]] == sc)
-      df_sc <- df[idx_sc, , drop = FALSE]
-
-      # unique models in this scenario
-      models_sc <- unique(df_sc$model_clean)
-      w_model <- 1 / length(models_sc)
-
-      # split model weight across multiple rows per model in this scenario
-      for (m in models_sc) {
-        idx_m <- idx_sc[df_sc$model_clean == m]
-        df$w_genealogy[idx_m] <- w_model / length(idx_m)
-      }
-
-      # numerical guard: renormalize within scenario
-      s <- sum(df$w_genealogy[idx_sc], na.rm = TRUE)
-      if (is.finite(s) && s > .Machine$double.eps) {
-        df$w_genealogy[idx_sc] <- df$w_genealogy[idx_sc] / s
-      }
-    }
+    # Step 7: Renormalize within scenario (numerical guard)
+    df <- df |>
+      dplyr::group_by(dplyr::across(dplyr::all_of(scenario_col))) |>
+      dplyr::mutate(
+        !!weight_col := .data[[weight_col]] / sum(.data[[weight_col]], na.rm = TRUE)
+      ) |>
+      dplyr::ungroup()
 
     df
   }
 
   # ---------------------------------------------------------------------------
-  # Validate inputs
+  # Input validation
   # ---------------------------------------------------------------------------
+
+  if (!is.data.frame(gcm_data)) {
+    stop("'gcm_data' must be a data.frame.", call. = FALSE)
+  }
 
   .stop_if_missing(gcm_data, c(model_col, scenario_col), "gcm_data")
 
+  if (nrow(gcm_data) == 0) {
+    warning("Input gcm_data has zero rows.", call. = FALSE)
+    gcm_data[[clean_col]] <- character(0)
+    gcm_data[[family_col]] <- character(0)
+    gcm_data[[weight_col]] <- numeric(0)
+    return(gcm_data)
+  }
+
   # ---------------------------------------------------------------------------
-  # Build mapping and attach families (single pass - Suggestion #1)
+  # Build mapping and attach families
   # ---------------------------------------------------------------------------
 
-  map <- .build_mapping(kuma_table, cmip_phase = cmip_phase)
+  map <- .build_mapping(kuma_table, cmip_phase = cmip_phase, family_col_out = family_col)
 
   # Work on a copy with row ID for stable ordering
   df <- gcm_data
@@ -363,48 +455,49 @@ compute_gcm_weights_by_genealogy <- function(
     df$model_raw <- df[[model_col]]
   }
 
-  df$model_clean <- .clean_model_name(df[[model_col]])
+  # Clean model names
+  df[[clean_col]] <- .clean_model_name(df[[model_col]])
 
-  # attach model_family
-  df <- merge(
-    df,
-    map,
-    by.x = "model_clean",
-    by.y = "cmip_name",
-    all.x = TRUE,
-    sort = FALSE
-  )
+  # Attach family via left join (safer than merge for preserving order)
+  df <- df |>
+    dplyr::left_join(
+      map,
+      by = stats::setNames("cmip_name", clean_col)
+    )
 
-  # fallback for unmatched: treat as its own family
-  unmatched <- is.na(df$model_family) | !nzchar(df$model_family)
+  # Fallback for unmatched models: treat as own family
+  unmatched <- is.na(df[[family_col]]) | !nzchar(df[[family_col]])
   if (any(unmatched)) {
-    df$model_family[unmatched] <- df$model_clean[unmatched]
+    df[[family_col]][unmatched] <- df[[clean_col]][unmatched]
   }
 
-  # restore original row order
+  # ---------------------------------------------------------------------------
+  # Compute weights (vectorized)
+  # ---------------------------------------------------------------------------
+
+  df <- .compute_weights_vectorized(
+    df = df,
+    scenario_col = scenario_col,
+    clean_col = clean_col,
+    family_col = family_col,
+    weight_col = weight_col,
+    method = method
+  )
+
+  # Restore original row order
   df <- df[order(df$.row_id), , drop = FALSE]
   df$.row_id <- NULL
 
   # ---------------------------------------------------------------------------
-  # Compute weights (Suggestion #4 - multiple methods)
-  # ---------------------------------------------------------------------------
-
-  if (method == "family") {
-    df <- .compute_family_weights_per_scenario(df, scenario_col = scenario_col)
-  } else if (method == "family_sqrt") {
-    df <- .compute_family_sqrt_weights_per_scenario(df, scenario_col = scenario_col)
-  } else if (method == "independence") {
-    df <- .compute_independence_weights_per_scenario(df, scenario_col = scenario_col)
-  }
-
-  # ---------------------------------------------------------------------------
-  # Messaging (Suggestion #3 - enhanced diagnostics)
+  # Diagnostics and validation
   # ---------------------------------------------------------------------------
 
   if (verbose) {
-    n_total_models <- length(unique(df$model_clean))
-    n_mapped <- sum(unique(df$model_clean) %in% map$cmip_name)
+    # Mapping summary
+    n_total_models <- length(unique(df[[clean_col]]))
+    n_mapped <- sum(unique(df[[clean_col]]) %in% map$cmip_name)
     n_unmapped <- n_total_models - n_mapped
+
     message(sprintf(
       "[GENEALOGY] CMIP phase=%s | method=%s | unique models=%d | mapped=%d | unmapped=%d (fallback family=model)",
       cmip_phase, method, n_total_models, n_mapped, n_unmapped
@@ -414,11 +507,24 @@ compute_gcm_weights_by_genealogy <- function(
     scenarios <- sort(unique(as.character(df[[scenario_col]])))
     for (sc in scenarios) {
       df_sc <- df[df[[scenario_col]] == sc, , drop = FALSE]
-      n_fam_sc <- length(unique(df_sc$model_family))
-      n_mod_sc <- length(unique(df_sc$model_clean))
+      n_fam_sc <- length(unique(df_sc[[family_col]]))
+      n_mod_sc <- length(unique(df_sc[[clean_col]]))
       message(sprintf("  %s: %d families | %d models", sc, n_fam_sc, n_mod_sc))
+    }
+
+    # Weight sum validation
+    weight_sums <- tapply(df[[weight_col]], df[[scenario_col]], sum, na.rm = TRUE)
+    bad_sums <- names(weight_sums)[abs(weight_sums - 1) > 1e-6]
+
+    if (length(bad_sums) > 0) {
+      warning(
+        "Weights do not sum to 1 in scenarios: ",
+        paste(bad_sums, collapse = ", "),
+        call. = FALSE
+      )
     }
   }
 
   df
 }
+
