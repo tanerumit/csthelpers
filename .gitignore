@@ -1,4 +1,17 @@
+
+# Common R ignores
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
+
+# Ignore everything in .vscode
+.vscode/*
+
+# Except these (explicitly tracked)
+!.vscode/settings.json
+!.vscode/tasks.json
+
+# Other
+.venv/
+output/

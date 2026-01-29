@@ -1,0 +1,16 @@
+{
+  // --- R (Windows, system R) ---
+  "r.rpath.windows": "C:\\Program Files\\R\\R-4.5.2",
+  "r.rterm.windows": "C:\\Program Files\\R\\R-4.5.2\\bin\\R.exe",
+  "r.bracketedPaste": true,
+  "r.plot.useHttpgd": true,
+  "r.sessionWatcher": true,
+
+  // --- Terminal ---
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+
+  // --- Files ---
+  "files.eol": "\r\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true
+}

@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start PowerShell",
+      "type": "shell",
+      "command": "echo PowerShell ready",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Start R terminal",
+      "type": "shell",
+       "command": "& 'C:\\Program Files\\R\\R-4.5.2\\bin\\R.exe' --no-save --no-restore"
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Startup: PowerShell + R",
+      "dependsOn": [
+        "Start PowerShell",
+        "Start R terminal"
+      ],
+      "runOptions": {
+        "runOn": "folderOpen"
+      }
+    }
+  ]
+}

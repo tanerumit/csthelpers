@@ -1,10 +1,12 @@
 
+
+# Required libraries
 library(readr)
 library(dplyr)
 library(ggplot2)
 
+# Source script
 source("R/climate_surface_plot.R")
-
 
 # Climate stress test data
 str_lookup <- read_csv("data/s4w_rhine_strlookup.csv")
