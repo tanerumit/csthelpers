@@ -2,14 +2,19 @@
   // --- R (Windows, system R) ---
   "r.rpath.windows": "C:\\Program Files\\R\\R-4.5.2",
   "r.rterm.windows": "C:\\Program Files\\R\\R-4.5.2\\bin\\R.exe",
+    "r.rterm.option": [
+    "--no-save",
+    "--no-restore"
+  ],
   "r.bracketedPaste": true,
   "r.plot.useHttpgd": true,
   "r.sessionWatcher": true,
 
   // --- Terminal ---
-  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "terminal.integrated.defaultProfile.windows": "Git Bash",
 
   // --- Files ---
+  "editor.formatOnSave": false,
   "files.eol": "\r\n",
   "files.trimTrailingWhitespace": true,
   "files.insertFinalNewline": true
