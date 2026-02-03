@@ -10,11 +10,11 @@ testthat::test_that("compute_gcm_weights_by_institution splits by institution an
 
   out <- compute_gcm_weights_by_institution(df)
 
-  s1 <- out[out$scenario == "S1", "w_inst"]
+  s1 <- out$w_inst[out$scenario == "S1"]
   testthat::expect_equal(sum(s1), 1)
   testthat::expect_equal(s1, c(0.25, 0.25, 0.5), tolerance = 1e-12)
 
-  s2 <- out[out$scenario == "S2", "w_inst"]
+  s2 <- out$w_inst[out$scenario == "S2"]
   testthat::expect_equal(s2, 1)
 })
 

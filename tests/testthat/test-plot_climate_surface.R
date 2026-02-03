@@ -1,4 +1,4 @@
-# Functions: climate_surface_base (R/climate_surface_plot.R), ggsave_smart (R/climate_surface_plot.R)
+# Functions: climate_surface_base (R/plot_climate_surface.R), climate_surface_gcm_overlay (R/plot_climate_surface.R)
 
 testthat::test_that("climate_surface_base returns ggplot with metadata", {
   testthat::skip_if_not_installed("ggplot2")
@@ -22,8 +22,8 @@ testthat::test_that("climate_surface_base returns ggplot with metadata", {
   )
 
   testthat::expect_s3_class(p, "ggplot")
-  testthat::expect_true(is.numeric(attr(p, "legend_barwidth_in")))
-  testthat::expect_true(is.numeric(attr(p, "legend_barheight_in")))
+  testthat::expect_true(is.numeric(attr(p, "legend_barwidth_spec")))
+  testthat::expect_true(is.numeric(attr(p, "legend_barheight_spec")))
 })
 
 testthat::test_that("climate_surface_base errors when baseline missing and threshold NULL", {
@@ -51,17 +51,41 @@ testthat::test_that("climate_surface_base errors when baseline missing and thres
   )
 })
 
-testthat::test_that("ggsave_smart writes output and returns sizing details", {
+testthat::test_that("climate_surface_gcm_overlay adds scatter layer", {
   testthat::skip_if_not_installed("ggplot2")
+  testthat::skip_if_not_installed("dplyr")
   suppressPackageStartupMessages(library(ggplot2))
 
-  p <- ggplot2::ggplot(mtcars, ggplot2::aes(wt, mpg)) +
-    ggplot2::geom_point()
+  df <- data.frame(
+    dx = c(0, 0, 1, 1),
+    dy = c(0, 1, 0, 1),
+    dz = c(0.1, 0.2, 0.3, 0.4)
+  )
 
-  out_file <- tempfile(fileext = ".png")
-  res <- ggsave_smart(out_file, p, target = "ppt", verbose = FALSE)
+  p_base <- climate_surface_base(
+    data = df,
+    x_var = "dx",
+    y_var = "dy",
+    z_var = "dz",
+    threshold = 0.2,
+    n_contours = 5
+  )
 
-  testthat::expect_true(file.exists(out_file))
-  testthat::expect_true(is.list(res))
-  testthat::expect_true(all(c("width_in", "height_in", "dpi") %in% names(res)))
+  gcm_data <- data.frame(
+    scenario = c("ssp126", "ssp245"),
+    horizon = c("near", "far"),
+    dx = c(0.2, 0.8),
+    dy = c(0.3, 0.7)
+  )
+
+  p_overlay <- climate_surface_gcm_overlay(
+    p = p_base,
+    gcm_data = gcm_data,
+    scenario_levels = c("ssp126", "ssp245"),
+    horizon_levels = c("near", "far"),
+    spread_method = "none",
+    show_legend = FALSE
+  )
+
+  testthat::expect_s3_class(p_overlay, "ggplot")
 })

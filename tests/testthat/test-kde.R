@@ -1,6 +1,6 @@
-# Functions: plot_basin_map (R/plotting_utils.R), sos_radialplot (R/plotting_utils.R), plot_kde_weights (R/scenario_probabilities_plots.R)
+# Functions: plot_kde (R/plot_kde.R)
 
-testthat::test_that("plot_kde_weights returns ggplot for valid inputs", {
+testthat::test_that("plot_kde returns ggplot for valid inputs", {
   testthat::skip_if_not_installed("ggplot2")
   suppressPackageStartupMessages(library(ggplot2))
 
@@ -16,6 +16,6 @@ testthat::test_that("plot_kde_weights returns ggplot for valid inputs", {
     prcp = c(0.2, 0.8)
   )
 
-  p <- plot_kde_weights(kde_long, obs, bins = 3, raster_interpolate = FALSE)
+  p <- plot_kde(kde_long, obs, bins = 3, raster_interpolate = FALSE)
   testthat::expect_s3_class(p, "ggplot")
 })
