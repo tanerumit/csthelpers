@@ -2,19 +2,11 @@
 % Please edit documentation in R/scenario_probabilities.R
 \name{.scenprob_validate_sigma}
 \alias{.scenprob_validate_sigma}
-\title{Validate covariance matrix for MVN fitting}
+\title{Validate Sigma as finite, positive-definite, and well-conditioned}
 \usage{
 .scenprob_validate_sigma(Sigma, grp = "")
 }
-\arguments{
-\item{Sigma}{2x2 covariance matrix.}
-
-\item{grp}{Group label for error messages.}
-}
-\value{
-List with `valid` (logical) and `reason` (character or NULL).
-}
 \description{
-Checks for finite values, positive diagonal, and non-singularity.
+Validate Sigma as finite, positive-definite, and well-conditioned
 }
 \keyword{internal}

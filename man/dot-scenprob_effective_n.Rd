@@ -2,17 +2,11 @@
 % Please edit documentation in R/scenario_probabilities.R
 \name{.scenprob_effective_n}
 \alias{.scenprob_effective_n}
-\title{Compute effective sample size from weights}
+\title{Effective sample size (Kish) for diagnostics}
 \usage{
 .scenprob_effective_n(w)
 }
-\arguments{
-\item{w}{Numeric vector of weights (need not sum to 1).}
-}
-\value{
-Effective sample size (Kish's formula).
-}
 \description{
-Compute effective sample size from weights
+Effective sample size (Kish) for diagnostics
 }
 \keyword{internal}

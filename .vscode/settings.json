@@ -11,7 +11,7 @@
   "r.sessionWatcher": true,
 
   // --- Terminal ---
-  "terminal.integrated.defaultProfile.windows": "Git Bash",
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
 
   // --- Files ---
   "editor.formatOnSave": false,

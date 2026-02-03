@@ -11,6 +11,9 @@ compute_gcm_weights_by_genealogy(
   scenario_col = "scenario",
   cmip_phase = c("CMIP6", "CMIP5", "CMIP3"),
   method = c("family", "family_sqrt", "independence"),
+  clean_col = "model_clean",
+  family_col = "model_family",
+  weight_col = "w_genealogy",
   keep_original_model = TRUE,
   verbose = TRUE
 )
@@ -32,15 +35,21 @@ Default "CMIP6".}
 - "family_sqrt": Weight proportional to 1/sqrt(n_models_in_family)
 - "independence": Ignore genealogy (equal weight per model)}
 
-\item{keep_original_model}{Logical. If TRUE, keep original model string and add a cleaned model field.}
+\item{clean_col}{Character. Output column name for cleaned model names. Default "model_clean".}
 
-\item{verbose}{Logical. If TRUE, prints a short mapping/coverage summary.}
+\item{family_col}{Character. Output column name for family assignment. Default "model_family".}
+
+\item{weight_col}{Character. Output column name for weights. Default "w_genealogy".}
+
+\item{keep_original_model}{Logical. If TRUE, keep original model string in "model_raw".}
+
+\item{verbose}{Logical. If TRUE, prints mapping/coverage summary and validates weights.}
 }
 \value{
 `gcm_data` with added columns:
-- model_clean: cleaned CMIP model name used for mapping
-- model_family: genealogy family (from Kuma table; fallback to model_clean if unmatched)
-- w_genealogy: per-row weight within scenario_col; sums to 1 per scenario
+- `clean_col`: cleaned CMIP model name used for mapping
+- `family_col`: genealogy family (from Kuma table; fallback to model_clean if unmatched)
+- `weight_col`: per-row weight within scenario_col; sums to 1 per scenario
 }
 \description{
 Computes relative weights for models within each SSP scenario using the
@@ -51,4 +60,14 @@ within each SSP, then splits that family weight equally among models from
 that family present in that SSP. If multiple rows per model exist (e.g.,
 different ensemble members/variants), the model weight is split equally
 across those rows.
+}
+\examples{
+\dontrun{
+result <- compute_gcm_weights_by_genealogy(
+  gcm_data = my_gcm_data,
+  kuma_table = read.csv("kuma_table_s1.csv"),
+  method = "family"
+)
+}
+
 }

@@ -1,24 +1,4 @@
-# =============================================================================
-# GCM Weighting Functions (Improved)
-# =============================================================================
-#
-# Two functions for computing climate model ensemble weights:
-# - compute_gcm_weights_by_institution(): Institution-based weighting
-# - compute_gcm_weights_by_genealogy(): Genealogy-based weighting (Kuma et al.)
-#
-# Improvements over original:
-# 1. Vectorized operations using dplyr (O(n) instead of O(n²))
-# 2. Proper tidy evaluation with .data pronoun
-# 3. Configurable output column names
-# 4. Weight sum validation diagnostics
-# 5. Defensive checks for edge cases
-# 6. Safer tapply/split handling
-#
-# Dependencies: dplyr, rlang
-# =============================================================================
 
-#' @importFrom dplyr group_by mutate ungroup n across all_of left_join distinct
-#' @importFrom rlang .data sym
 
 # =============================================================================
 # compute_gcm_weights_by_institution
@@ -51,6 +31,8 @@
 #' result <- compute_gcm_weights_by_institution(gcm_data)
 #' }
 #'
+#' @import dplyr
+#' @importFrom rlang .data sym
 #' @export
 compute_gcm_weights_by_institution <- function(
     data,

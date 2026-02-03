@@ -11,25 +11,37 @@
       }
     },
     {
-    "label": "Start R terminal",
-    "type": "shell",
-    "command": "& 'C:\\Program Files\\R\\R-4.5.2\\bin\\R.exe' --no-save --no-restore",
-    "options": {
-      "shell": {
-        "executable": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-        "args": [
-          "-NoLogo",
-          "-NoProfile",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-Command"
-        ]
+      "label": "Keep PowerShell open",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoExit", "-Command", "Write-Host 'PowerShell ready'"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "close": false
       }
     },
-    "presentation": {
-      "reveal": "always",
-      "panel": "new"
-    }
+    {
+      "label": "Start R terminal",
+      "type": "shell",
+      "command": "& 'C:\\Program Files\\R\\R-4.5.2\\bin\\R.exe' --no-save --no-restore",
+      "options": {
+        "shell": {
+          "executable": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "args": [
+            "-NoLogo",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command"
+          ]
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
     },
     {
       "label": "Startup: PowerShell + R",

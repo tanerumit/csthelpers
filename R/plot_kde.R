@@ -1,6 +1,8 @@
 
-
-plot_kde_weights <- function(
+#' Plot Kernel Density Estimate as a heatmap
+#' @import ggplot2 dplyr
+#' @export
+plot_kde <- function(
     kde_long,
     obs_data,
     ta_col = "tavg",
@@ -81,46 +83,46 @@ plot_kde_weights <- function(
   # ---------------------------------------------------------------------------
   # Plot
   # ---------------------------------------------------------------------------
-  ggplot2::ggplot(
+  ggplot(
     kde_long,
-    ggplot2::aes(
+    aes(
       x = .data[[ta_col]],
       y = .data[[pr_col]]
     )
   ) +
-    ggplot2::theme_light() +
-    ggplot2::geom_raster(
-      ggplot2::aes(fill = .data[[value_col]]),
+    theme_light() +
+    geom_raster(
+      aes(fill = .data[[value_col]]),
       interpolate = raster_interpolate
     ) +
-    ggplot2::geom_contour(
-      ggplot2::aes(z = .data[[value_col]]),
+    geom_contour(
+      aes(z = .data[[value_col]]),
       bins = bins,
       linewidth = 0.3
     ) +
-    ggplot2::geom_point(
+    geom_point(
       data = obs_data,
-      ggplot2::aes(
+      aes(
         x = .data[[ta_col]],
         y = .data[[pr_col]]
       ),
       alpha = point_alpha,
       inherit.aes = FALSE
     ) +
-    ggplot2::labs(
+    labs(
       x = "ΔT",
       y = "ΔP",
       fill = "weight"
     ) +
-    ggplot2::facet_wrap(stats::as.formula(paste("~", scenario_col))) +
-    ggplot2::scale_fill_viridis_c(
+    facet_wrap(stats::as.formula(paste("~", scenario_col))) +
+    scale_fill_viridis_c(
       option = fill_option,
       begin = fill_begin,
       end = fill_end,
       alpha = fill_alpha,
       name = fill_name
     ) +
-    ggplot2::coord_cartesian(
+    coord_cartesian(
       expand = FALSE,
       xlim = xlim,
       ylim = ylim,

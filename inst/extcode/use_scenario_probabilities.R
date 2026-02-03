@@ -6,7 +6,7 @@ library(ggplot2)
 library(viridis)
 library(tidyr)
 
-# Datsets
+# Datasets
 str_lookup <- read_csv("data/s4w_rhine_strlookup.csv")
 str_grid <- str_lookup %>% filter(rlz == 1)
 

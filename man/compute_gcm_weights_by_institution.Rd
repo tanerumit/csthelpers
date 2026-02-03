@@ -9,7 +9,8 @@ compute_gcm_weights_by_institution(
   scenario_col = "scenario",
   institution_col = "institution",
   model_col = "model",
-  weight_col = "w_inst"
+  weight_col = "w_inst",
+  verbose = FALSE
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ compute_gcm_weights_by_institution(
 \item{model_col}{Character. Model column name. Default "model".}
 
 \item{weight_col}{Character. Output weight column name. Default "w_inst".}
+
+\item{verbose}{Logical. If TRUE, prints diagnostics and validates weight sums.}
 }
 \value{
 `data` with an added column `weight_col` summing to 1 within each scenario.
@@ -31,4 +34,15 @@ Within each scenario (e.g., SSP), assigns equal total weight to each institution
 then splits that institution weight equally among models from that institution
 present in that scenario. If multiple rows exist for the same model within a
 scenario (e.g., ensemble members), the model's weight is split equally across rows.
+}
+\examples{
+\dontrun{
+gcm_data <- data.frame(
+  model = c("ACCESS-CM2", "ACCESS-ESM1-5", "GFDL-CM4", "IPSL-CM6A-LR"),
+  institution = c("CSIRO", "CSIRO", "NOAA-GFDL", "IPSL"),
+  scenario = rep("SSP2-4.5", 4)
+)
+result <- compute_gcm_weights_by_institution(gcm_data)
+}
+
 }

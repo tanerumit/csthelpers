@@ -1,5 +1,4 @@
 
-
 # Required libraries
 library(readr)
 library(dplyr)
@@ -80,8 +79,8 @@ ggplot2::ggsave("TEMP/figure1.png", p1, width = p_width, height = p_height, dpi 
 p2 <- climate_surface_gcm_overlay(
   p1, gcm_data = gcm_data,
   horizon_levels = "near",
-  ellipse_levels = c(0.50, 0.90),
-  ellipse_group = "none" # "none", "scenario", "horizon", "scenario_horizon"
+  spread_levels = c(0.50, 0.90),
+  spread_group = "none" # "none", "scenario", "horizon", "scenario_horizon"
 )
 
 ggplot2::ggsave("TEMP/figure2.png", p2, width = p_width, height = p_height, dpi = 300)
@@ -89,10 +88,8 @@ ggplot2::ggsave("TEMP/figure2.png", p2, width = p_width, height = p_height, dpi 
 p3 <- climate_surface_gcm_overlay(
   p1, gcm_data = gcm_data,
   horizon_levels = "near",
-  ellipse_levels = c(0.50, 0.90),
-  ellipse_method = "robust",
-  ellipse_group = "none"
-)
+  spread_method = c("ellipse_norm"),
+  spread_levels = c(0.50, 0.90))
 
 ggplot2::ggsave("TEMP/figure3.png", p3, width = p_width, height = p_height, dpi = 300)
 
@@ -100,12 +97,18 @@ ggplot2::ggsave("TEMP/figure3.png", p3, width = p_width, height = p_height, dpi 
 p4 <- climate_surface_gcm_overlay(
   p1, gcm_data = gcm_data,
   horizon_levels = "near",
-  kde_levels = c(0.5, 0.6, 0.7, 0.8, 0.9, 0.95),
-  kde_group = "none",
-  kde_bw_adjust = 1.0,
-  kde_n = 140
+  spread_method = c("ellipse_robust"),
+  spread_levels = c(0.50, 0.90))
 
-)
 ggplot2::ggsave("TEMP/figure4.png", p4, width = p_width, height = p_height, dpi = 300)
 
+
+
+p5 <- climate_surface_gcm_overlay(
+  p1, gcm_data = gcm_data,
+  horizon_levels = "near",
+  spread_method = c("kde"),
+  spread_levels = c(0.50, 0.90))
+
+ggplot2::ggsave("TEMP/figure5.png", p5, width = p_width, height = p_height, dpi = 300)
 

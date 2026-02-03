@@ -2,23 +2,11 @@
 % Please edit documentation in R/scenario_probabilities.R
 \name{.scenprob_dmvnorm2_chol}
 \alias{.scenprob_dmvnorm2_chol}
-\title{Bivariate normal density using Cholesky decomposition}
+\title{Bivariate normal density using pre-computed Cholesky factor}
 \usage{
-.scenprob_dmvnorm2_chol(x, mu, Sigma)
-}
-\arguments{
-\item{x}{Matrix (n x 2) of evaluation points.}
-
-\item{mu}{Numeric vector length 2, mean.}
-
-\item{Sigma}{2x2 covariance matrix.}
-}
-\value{
-Numeric vector of density values, or NA if decomposition fails.
+.scenprob_dmvnorm2_chol(x, mu, chol_L)
 }
 \description{
-More numerically stable than direct matrix inversion, especially for
-near-singular covariance matrices. Uses log-space computation to prevent
-underflow for extreme values.
+Bivariate normal density using pre-computed Cholesky factor
 }
 \keyword{internal}

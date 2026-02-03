@@ -2,7 +2,7 @@
 % Please edit documentation in R/scenario_probabilities.R
 \name{estimate_scenario_probs_mvnorm}
 \alias{estimate_scenario_probs_mvnorm}
-\title{Calculate Climate-Informed Scenario Weights (MVN; optional robust fit; optional family weighting)}
+\title{Calculate Climate-Informed Scenario Weights (MVN; external per-row weights)}
 \usage{
 estimate_scenario_probs_mvnorm(
   ensemble_data,
@@ -15,110 +15,46 @@ estimate_scenario_probs_mvnorm(
   normalize = TRUE,
   area_weight = c("regular", "none"),
   scale = c("none", "global", "by_group"),
-  use_family_weights = FALSE,
-  family_col = "model_family",
+  weights_col = NULL,
   support = NULL,
   diagnostics = FALSE,
   verbose = TRUE
 )
 }
 \arguments{
-\item{ensemble_data}{Data frame with ensemble points used to fit per-group MVN.}
+\item{ensemble_data}{Data frame containing ensemble projections.}
 
-\item{scenario_grid}{Data frame with grid points where weights are evaluated.}
+\item{scenario_grid}{Data frame defining the evaluation grid.}
 
-\item{pr_col}{Character scalar. Precipitation change column name.}
+\item{pr_col}{Column name for precipitation variable.}
 
-\item{ta_col}{Character scalar. Temperature change column name.}
+\item{ta_col}{Column name for temperature variable.}
 
-\item{group_col}{Character scalar. Grouping column in `ensemble_data`.}
+\item{group_col}{Column name for grouping (e.g., scenario).}
 
-\item{robust}{Logical scalar. If `TRUE`, use robust mean/cov via `MASS::cov.trob()`.}
+\item{robust}{Logical; use robust covariance estimation?}
 
-\item{min_samples}{Integer scalar. Minimum complete observations required per group.
-Recommended: >= 5 for robust fits.}
+\item{min_samples}{Minimum observations required per group.}
 
-\item{normalize}{Logical scalar. If `TRUE`, normalize weights within each group.}
+\item{normalize}{Logical; normalize to PMF?}
 
-\item{area_weight}{Character scalar: `"regular"` or `"none"`.}
+\item{area_weight}{Area weighting method: "regular" or "none".}
 
-\item{scale}{Character scalar: `"none"`, `"global"`, or `"by_group"`.}
+\item{scale}{Scaling method: "none", "global", or "by_group".}
 
-\item{use_family_weights}{Logical scalar. If `TRUE`, each family contributes
-equal total influence within each group when estimating mean/cov.}
+\item{weights_col}{Optional column with per-row weights (incompatible with robust=TRUE).}
 
-\item{family_col}{Character scalar naming the family column (if used).}
+\item{support}{Optional list with ta and/or pr bounds.}
 
-\item{support}{Optional named list with `ta` and/or `pr` ranges to hard-mask grid.}
+\item{diagnostics}{Logical; attach diagnostic attributes?}
 
-\item{diagnostics}{Logical scalar. If `TRUE`, attach additional attributes with
-per-group diagnostic information: `mvn_params`, `effective_sample_size`, and
-`scaling_params`. Default is `FALSE`.}
-
-\item{verbose}{Logical scalar. If `TRUE`, prints per-group messages.}
+\item{verbose}{Logical; print progress messages?}
 }
 \value{
-Data frame identical to `scenario_grid` plus one weight column per group
-(alphabetically ordered by group name after `make.names()`).
-
-Attributes:
-- `"skipped_groups"`: Character vector of groups skipped due to insufficient data
-  or degeneracy.
-
-When `diagnostics = TRUE`, additional attributes:
-- `"mvn_params"`: Named list with `mu` and `Sigma` (in working space) per group.
-- `"effective_sample_size"`: Named list with effective n per group.
-- `"scaling_params"`: List with global or per-group scaling parameters.
-- `"fit_method"`: Character indicating "robust" or "classical" per group.
+Data frame with scenario_grid columns plus one weight column per group.
 }
 \description{
-For each group (e.g., SSP), fits a bivariate normal distribution to
-(temperature change, precipitation change) and evaluates the fitted density
-on a user-provided stress-test grid. Returns per-group weights.
-
-As with KDE, the MVN density is a continuous density, not a probability. When
-`normalize = TRUE`, the function returns a discrete probability mass function
-(PMF) over the provided grid points. Without area weighting, that PMF depends
-on grid resolution. Using `area_weight = "regular"` applies regular-grid cell
-areas before normalization, yielding results that are invariant to grid
-resolution for regular grids (i.e., constant `dT * dP` cell area).
-
-MVN is a parametric analogue to `estimate_scenario_probs_kde()`.
-It is most appropriate when the ensemble cloud is reasonably elliptical
-and unimodal within each group.
-
-This implementation uses Cholesky decomposition for numerical stability when
-evaluating the bivariate normal density, which is more robust than direct
-matrix inversion for near-singular covariance matrices.
-}
-\examples{
-set.seed(42)
-ensemble_data <- data.frame(
-  scenario = rep(c("SSP1", "SSP2"), each = 50),
-  tavg     = c(rnorm(50, 1.5, 0.4), rnorm(50, 2.5, 0.5)),
-  prcp     = c(rnorm(50, 5, 1.0), rnorm(50, 0, 1.2))
-)
-
-scenario_grid <- expand.grid(
-  tavg = seq(0, 4, by = 0.2),
-  prcp = seq(-4, 10, by = 0.5)
-)
-
-# Basic usage
-w <- estimate_scenario_probs_mvnorm(
-  ensemble_data = ensemble_data,
-  scenario_grid = scenario_grid,
-  verbose = FALSE
-)
-colSums(w[, c("SSP1", "SSP2")])
-
-# With diagnostics
-w_diag <- estimate_scenario_probs_mvnorm(
-  ensemble_data = ensemble_data,
-  scenario_grid = scenario_grid,
-  diagnostics = TRUE,
-  verbose = FALSE
-)
-attr(w_diag, "mvn_params")
-
+For each group, fits a bivariate normal distribution to (ta, pr) and evaluates
+its density on `scenario_grid`. If `normalize=TRUE`, returns a discrete PMF over
+grid points (optionally area-weighted for regular grids).
 }

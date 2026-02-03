@@ -2,7 +2,7 @@
 % Please edit documentation in R/scenario_probabilities.R
 \name{.scenprob_kde_chunk_vectorized}
 \alias{.scenprob_kde_chunk_vectorized}
-\title{Vectorized KDE chunk evaluation}
+\title{Vectorized weighted KDE over a chunk of grid points (Gaussian product kernel)}
 \usage{
 .scenprob_kde_chunk_vectorized(
   g_ta,
@@ -14,26 +14,7 @@
   inv_bw_pr
 )
 }
-\arguments{
-\item{g_ta}{Numeric vector of grid temperature values (chunk).}
-
-\item{g_pr}{Numeric vector of grid precipitation values (chunk).}
-
-\item{ta_use}{Numeric vector of observation temperature values.}
-
-\item{pr_use}{Numeric vector of observation precipitation values.}
-
-\item{w_obs}{Numeric vector of observation weights (sum to 1).}
-
-\item{inv_bw_ta}{Inverse bandwidth for temperature.}
-
-\item{inv_bw_pr}{Inverse bandwidth for precipitation.}
-}
-\value{
-Numeric vector of density values for the chunk.
-}
 \description{
-Computes weighted Gaussian product-kernel density for a chunk of grid points.
-Uses matrix operations instead of explicit loops for improved performance.
+Vectorized weighted KDE over a chunk of grid points (Gaussian product kernel)
 }
 \keyword{internal}

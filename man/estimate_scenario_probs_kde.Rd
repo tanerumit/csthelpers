@@ -2,7 +2,7 @@
 % Please edit documentation in R/scenario_probabilities.R
 \name{estimate_scenario_probs_kde}
 \alias{estimate_scenario_probs_kde}
-\title{Calculate Climate-Informed Scenario Weights (KDE; auto bandwidth; optional family weighting)}
+\title{Calculate Climate-Informed Scenario Weights (KDE; external per-row weights)}
 \usage{
 estimate_scenario_probs_kde(
   ensemble_data,
@@ -11,6 +11,7 @@ estimate_scenario_probs_kde(
   ta_col = "tavg",
   group_col = "scenario",
   bw = NULL,
+  bw_method = c("auto", "plugin", "nrd"),
   k = c(1.5, 2),
   alpha = 1,
   bw_min = c(0, 0),
@@ -19,8 +20,7 @@ estimate_scenario_probs_kde(
   normalize = TRUE,
   area_weight = c("regular", "none"),
   scale = c("none", "global", "by_group"),
-  use_family_weights = FALSE,
-  family_col = "model_family",
+  weights_col = NULL,
   support = NULL,
   chunk_size = 5000L,
   diagnostics = FALSE,
@@ -28,314 +28,51 @@ estimate_scenario_probs_kde(
 )
 }
 \arguments{
-\item{ensemble_data}{Data frame containing the ensemble of scenario change pairs used to fit the
-KDE within each group. Must contain `ta_col`, `pr_col`, and `group_col`.
-Rows with non-finite values in either variable are dropped within each group.}
+\item{ensemble_data}{Data frame containing ensemble projections.}
 
-\item{scenario_grid}{Data frame defining the stress-test design space where KDE is evaluated.
-Must contain columns named `ta_col` and `pr_col`. Each row is one grid point.
-The output retains this grid and appends one weight column per group.}
+\item{scenario_grid}{Data frame defining the evaluation grid.}
 
-\item{pr_col}{Character scalar giving the precipitation-change column name in both
-`ensemble_data` and `scenario_grid`. Use a consistent representation
-(e.g., percent change, absolute change) across both inputs.}
+\item{pr_col}{Column name for precipitation variable.}
 
-\item{ta_col}{Character scalar giving the temperature-change column name in both
-`ensemble_data` and `scenario_grid` (e.g., °C change).}
+\item{ta_col}{Column name for temperature variable.}
 
-\item{group_col}{Character scalar naming the grouping variable in `ensemble_data` that defines
-separate KDE fits (e.g., `"scenario"`, `"ssp"`, `"pathway"`). Each unique value
-becomes one output weight column (made syntactically valid via `make.names()`).}
+\item{group_col}{Column name for grouping (e.g., scenario).}
 
-\item{bw}{Optional numeric length-2 vector giving fixed bandwidths in **original units**:
-`c(bw_ta, bw_pr)`. If supplied, the same bandwidth is used for all groups.
-If `NULL` (default), bandwidths are auto-selected per group using `k`, `alpha`,
-and the grid step. Under `scale != "none"`, fixed `bw` is internally converted
-to scaled units using the relevant SDs.}
+\item{bw}{Optional user-specified bandwidth vector c(bw_ta, bw_pr).}
 
-\item{k}{Numeric length-2 vector of **grid-step multipliers** used only when `bw = NULL`.
-The product `k * grid_step` defines a floor on the bandwidth in each dimension
-to prevent bandwidths that are too small relative to grid resolution. Increase
-`k` to enforce smoother, less spiky weights on coarse grids; decrease `k` to
-allow finer structure on dense grids.}
+\item{bw_method}{Bandwidth selection method: "auto", "plugin", or "nrd".}
 
-\item{alpha}{Numeric scalar multiplier applied to the data-driven bandwidth estimates
-(`bandwidth.nrd`) when `bw = NULL`. Values > 1 increase smoothing (useful for
-small or noisy groups); values close to 1 keep the default data-driven scale.}
+\item{k}{Grid-step multipliers for bandwidth floor.}
 
-\item{bw_min}{Numeric length-2 vector giving minimum allowable bandwidths (in original units
-if `scale = "none"`, otherwise converted to scaled units internally). Use this
-to prevent near-zero bandwidths that yield unstable, highly localized weights.}
+\item{alpha}{Multiplier for data-driven bandwidth.}
 
-\item{bw_max}{Numeric length-2 vector giving maximum allowable bandwidths (in original units
-if `scale = "none"`, otherwise converted to scaled units internally). Use this
-to cap oversmoothing (e.g., in the presence of outliers or broad dispersion).}
+\item{bw_min}{Minimum bandwidth bounds.}
 
-\item{min_samples}{Integer scalar giving the minimum number of complete (finite) observations
-required per group to fit KDE. Groups failing this threshold are skipped and
-listed in `attr(out, "skipped_groups")`. Must be >= 3; recommended higher if
-you need stable multimodal shapes.}
+\item{bw_max}{Maximum bandwidth bounds.}
 
-\item{normalize}{Logical scalar. If `TRUE` (default), normalize weights within each group so the
-resulting grid PMF sums to 1 (after optional `area_weight` and `support` masking).
-If `FALSE`, returns raw KDE densities evaluated on the grid (not comparable across
-grids without further processing).}
+\item{min_samples}{Minimum observations required per group.}
 
-\item{area_weight}{Character scalar controlling whether grid-cell area is applied before normalization.
-- `"regular"`: multiplies densities by `dT * dP` (median grid step products) prior
-  to normalization, approximating a continuous integral on a **regular** grid and
-  making normalized weights stable to grid refinement.
-- `"none"`: normalizes raw pointwise densities; the resulting PMF depends on the
-  grid resolution and spacing.
-If grid steps are invalid or degenerate, `"regular"` is automatically disabled.}
+\item{normalize}{Logical; normalize to PMF?}
 
-\item{scale}{Character scalar controlling whether KDE is computed in standardized space:
-- `"none"`: no scaling; KDE geometry reflects original units.
-- `"global"`: scale using overall mean/SD across all groups (consistent geometry).
-- `"by_group"`: scale within each group (adaptive geometry, weaker cross-group
-  comparability). Scaling is disabled for a dimension if its SD is non-finite or
-  near zero in the relevant scope.}
+\item{area_weight}{Area weighting method: "regular" or "none".}
 
-\item{use_family_weights}{Logical scalar. If `TRUE`, apply observation weights so each `family_col` level
-contributes equal total influence within each group (near-duplicate control).
-If `FALSE` (default), all observations contribute equally within each group.}
+\item{scale}{Scaling method: "none", "global", or "by_group".}
 
-\item{family_col}{Character scalar naming the column in `ensemble_data` that identifies model family
-membership for `use_family_weights = TRUE`. Missing values are treated as a single
-`"NA_FAMILY"` group for weighting purposes.}
+\item{weights_col}{Optional column with per-row weights.}
 
-\item{support}{Optional named list specifying hard bounds in original units used to mask the
-**grid** (not the input ensemble). Provide `ta = c(min, max)` and/or
-`pr = c(min, max)`. Grid points outside the specified bounds receive zero weight
-before normalization. This is a truncation guard, not boundary-corrected KDE.}
+\item{support}{Optional list with ta and/or pr bounds.}
 
-\item{chunk_size}{Integer scalar controlling the number of grid points processed per chunk during
-KDE evaluation. Used to limit peak memory for large grids. Performance scales
-approximately with O(n_obs * n_grid) per group; `chunk_size` trades off overhead
-versus peak memory.}
+\item{chunk_size}{Grid evaluation chunk size.}
 
-\item{diagnostics}{Logical scalar. If `TRUE`, attach additional attributes with per-group diagnostic
-information: `bandwidth_used`, `effective_sample_size`, and `scaling_params`.
-Default is `FALSE`.}
+\item{diagnostics}{Logical; attach diagnostic attributes?}
 
-\item{verbose}{Logical scalar. If `TRUE`, prints per-group messages about bandwidth selection,
-scaling disablement, and skipped groups. Use `FALSE` for silent batch workflows.}
+\item{verbose}{Logical; print progress messages?}
 }
 \value{
-Data frame identical to `scenario_grid` plus one weight column per group
-(alphabetically ordered by group name after `make.names()`).
-
-Attributes:
-- `"skipped_groups"`: Character vector of groups skipped due to insufficient data
-  or degeneracy.
-
-When `diagnostics = TRUE`, additional attributes:
-- `"bandwidth_used"`: Named list with bandwidth vectors (in working space) per group.
-- `"effective_sample_size"`: Named list with effective n per group.
-- `"scaling_params"`: List with global or per-group scaling parameters.
+Data frame with scenario_grid columns plus one weight column per group.
 }
 \description{
-For each group (e.g., SSP), estimates a smooth 2D kernel density surface over
-(temperature change, precipitation change) using a Gaussian product-kernel KDE,
-evaluates it on a user-provided stress-test grid, and returns per-group weights.
-
-Note that the KDE output `dens` is a continuous density, not a probability.
-When `normalize = TRUE`, the function returns a discrete probability mass
-function (PMF) over the provided grid points. Without area weighting, that PMF
-depends on grid resolution. Using `area_weight = "regular"` applies regular-grid
-cell areas before normalization, yielding results that are invariant to grid
-resolution for regular grids (i.e., constant `dT * dP` cell area).
-
-If `bw = NULL`, bandwidths are chosen automatically per group using a grid-aware rule:
-\deqn{bw = max(k * grid\_step,\ \alpha * bw\_nrd)}
-where `grid_step` is the median spacing in `scenario_grid` for each dimension,
-`bw_nrd` is a data-driven bandwidth estimate for each dimension, `k` controls
-smoothing relative to grid spacing, and `alpha` scales the data-driven bandwidth.
-
-KDE is sensitive to variable units and relative axis magnitudes. When `scale` is
-enabled, the KDE is computed entirely in standardized space: ensemble observations
-and grid coordinates are centered/scaled, auto bandwidth selection happens in that
-scaled space, and the grid-step floor uses scaled grid steps. If the user supplies
-`bw`, it is interpreted in original units and converted to scaled units internally
-by dividing by the corresponding standard deviation (for the chosen scaling mode).
-
-Optionally, observations can be downweighted by model family (near-duplicate control)
-so that each family contributes equal total influence within each group.
-
-Gaussian KDE does not respect hard boundaries, so density can "leak" outside
-plausible ranges. The `support` argument is a pragmatic truncation guard that
-hard-zeros grid points outside user-specified bounds; it does not implement
-boundary-corrected kernels.
-}
-\details{
-## Typical use cases
-- **Stress-test weighting within scenario families**: You have an ensemble of
-  projected changes (e.g., from multiple GCM/RCM runs) for each scenario group
-  and you want a smooth, nonparametric weighting over a pre-defined stress-test
-  grid of \eqn{\Delta T} and \eqn{\Delta P} combinations.
-- **Scenario prioritization for downstream simulation**: You want a compact set
-  of grid states to sample more frequently (high KDE mass) and deprioritize
-  implausible combinations (low mass), while retaining group separation.
-- **Near-duplicate control**: You suspect clusters driven by correlated model
-  lineages; family weighting reduces over-representation of large families.
-
-## Strategies for choosing key parameters
-### 1) `scenario_grid` design and `area_weight`
-- If your grid is **regular** (constant spacing in both dimensions), prefer
-  `area_weight = "regular"` with `normalize = TRUE`. This approximates an
-  integral over the continuous KDE and makes results stable to grid refinement.
-- If your grid is **irregular** (uneven spacing), `area_weight = "regular"`
-  is not appropriate. This function does not implement irregular cell areas,
-  so you should either:
-  (i) use `area_weight = "none"` (accept grid-dependent PMF), or
-  (ii) convert to a regular grid upstream, or
-  (iii) implement external area weights and post-multiply before normalization.
-
-Practical rule:
-- When comparing weights across alternative grids or resolutions, do not use
-  `area_weight = "none"` unless you intentionally want grid-dependent masses.
-
-### 2) Bandwidth selection: `bw` vs (`k`, `alpha`, `bw_min`, `bw_max`)
-Bandwidth governs the bias–variance trade-off:
-- Too small: weights become spiky (overfit), sensitive to sampling noise and
-  duplicate runs.
-- Too large: weights become overly diffuse, blurring distinctions between
-  plausible and implausible regions.
-
-Recommended workflows:
-- **Default exploratory run**: `bw = NULL`, keep defaults (`k`, `alpha`) and
-  inspect resulting weight surfaces. Use this when you do not have strong prior
-  beliefs about smoothing scale.
-- **Grid-limited smoothing**: Increase `k` when your grid spacing is coarse and
-  you want at least a few grid steps of smoothing (avoid single-cell peaks).
-  Decrease `k` when the grid is dense and you want more local structure.
-- **Data-limited smoothing**: Increase `alpha` when sample size per group is
-  small or noisy (more smoothing). Decrease `alpha` when groups are large and
-  you want to preserve multimodality.
-
-Use bounds to stabilize edge cases:
-- `bw_min` prevents degenerately small bandwidths (spikes) in groups with
-  near-collinearity or low variance.
-- `bw_max` caps oversmoothing when `bandwidth.nrd()` becomes large due to
-  broad dispersion or outliers.
-
-Recommended starting points (then adjust based on diagnostics):
-- Coarse grid or discrete stress-test states: raise `k` (e.g., 2–4).
-- Very dense grid: lower `k` (e.g., 1–1.5) to avoid excessive diffusion.
-- Small n per group (< ~20): raise `alpha` (e.g., 1.5–2).
-- Large n per group (> ~100): `alpha` near 1 is usually sufficient.
-
-If you need strict comparability across groups, supply a fixed `bw` (in original
-units) so all groups use identical smoothing. This is useful when differences
-in auto-selected bandwidths are confounded with differences in group sample sizes.
-
-### 3) Scaling: `scale = "none" | "global" | "by_group"`
-KDE geometry depends on relative axis scaling. Choose scaling based on your
-objective:
-- `"none"`: Use when both variables are already commensurate or intentionally
-  expressed in comparable units (e.g., both standardized anomalies), or when
-  you want bandwidths interpretable directly in physical units without any
-  implicit rescaling.
-- `"global"`: Use when units/magnitudes differ (common for \eqn{\Delta T} in °C
-  vs \eqn{\Delta P} in percent) and you want a consistent kernel geometry across
-  groups. This is the most defensible default for multi-group comparison.
-- `"by_group"`: Use when within-group dispersion differs substantially and you
-  want KDE to adapt to each group's spread in standardized space. This increases
-  within-group resolution but reduces comparability of absolute smoothing scales
-  across groups (because each group uses its own SDs).
-
-Practical cautions:
-- If you supply `bw`, it is always interpreted in original units. Under scaling,
-  it will be internally converted using SDs; therefore, group-to-group effective
-  smoothing differs under `"by_group"` even with the same `bw` in original units.
-
-### 4) Family downweighting: `use_family_weights`, `family_col`
-Use family weighting when you have multiple realizations that are not
-statistically independent (e.g., many closely related model variants):
-- With `use_family_weights = TRUE`, each family contributes equal total weight
-  within a group, and members within a family split that family share evenly.
-- Use this when you want to treat families as the effective sample units.
-
-Do not use family weighting if:
-- Your "family" labels are noisy/ambiguous, or
-- You explicitly want the ensemble to reflect the available run counts.
-
-### 5) Truncation guard: `support`
-Use `support` to prevent allocating weight to physically or programmatically
-irrelevant parts of the grid (e.g., negative precipitation-change bounds if your
-stress test excludes drying). This is not boundary correction; it is a hard mask.
-
-Strategies:
-- Set `support` to the plausible envelope implied by your scenario definition
-  or by expert judgment (e.g., exclude combinations outside a policy-relevant
-  design space).
-- Prefer masking on the *grid* (as done here) rather than trimming the ensemble,
-  unless you want to change the KDE fit itself.
-
-### 6) Data sufficiency and skipping: `min_samples`
-Groups with too few complete observations or near-zero variance in either
-dimension are skipped. Set `min_samples` based on how stable you need KDE
-estimates to be:
-- Increase `min_samples` when you require robust multimodality and stable tails.
-- Decrease `min_samples` only if you accept noisy, potentially spurious surfaces.
-
-Operationally, examine `attr(out, "skipped_groups")` and decide whether to
-(i) merge sparse groups, (ii) expand the ensemble, or (iii) treat skipped groups
-as requiring manual weights.
-
-### 7) Performance and memory: `chunk_size`
-The KDE evaluation scales as O(n_obs * n_grid) per group. `chunk_size` controls
-the size of grid blocks used during evaluation:
-- Larger `chunk_size` reduces overhead but increases peak memory.
-- Smaller `chunk_size` reduces peak memory and may be needed for large grids,
-  at the cost of more looping overhead.
-
-Practical guidance:
-- For grids in the 10^4–10^5 range, start at 5,000–20,000.
-- If you see memory pressure, reduce `chunk_size` before changing the grid.
-
-### 8) Diagnostics: `diagnostics`
-When `diagnostics = TRUE`, additional attributes are attached to the output:
-- `bandwidth_used`: Named list of bandwidths (in working space) per group.
-- `effective_sample_size`: Named list of effective n per group (after family weighting).
-- `scaling_params`: Scaling parameters used (global or per-group).
-}
-\examples{
-# --- Example 1: Basic usage with auto bandwidth (two groups) ---
-set.seed(1)
-ensemble_data <- data.frame(
-  scenario = rep(c("SSP1", "SSP2"), each = 30),
-  tavg     = c(rnorm(30, mean = 1.5, sd = 0.4), rnorm(30, mean = 2.5, sd = 0.5)),
-  prcp     = c(rnorm(30, mean = 5,   sd = 1.0), rnorm(30, mean = 0,   sd = 1.2))
-)
-
-scenario_grid <- expand.grid(
-  tavg = seq(0.5, 3.5, by = 0.25),
-  prcp = seq(-3,  8,   by = 0.5)
-)
-
-w <- estimate_scenario_probs_kde(
-  ensemble_data  = ensemble_data,
-  scenario_grid  = scenario_grid,
-  group_col      = "scenario",
-  ta_col         = "tavg",
-  pr_col         = "prcp",
-  bw             = NULL,
-  normalize      = TRUE,
-  verbose        = FALSE
-)
-
-# Each group column sums to 1 over the grid (when normalize = TRUE)
-colSums(w[, c("SSP1", "SSP2")])
-
-# --- Example 2: With diagnostics output ---
-w_diag <- estimate_scenario_probs_kde(
-  ensemble_data  = ensemble_data,
-  scenario_grid  = scenario_grid,
-  diagnostics    = TRUE,
-  verbose        = FALSE
-)
-attr(w_diag, "bandwidth_used")
-attr(w_diag, "effective_sample_size")
-
+For each group (e.g., SSP), fits a 2D Gaussian product-kernel KDE to ensemble
+(ta, pr) points and evaluates it on `scenario_grid`. If `normalize=TRUE`, returns
+a discrete PMF over grid points (optionally area-weighted for regular grids).
 }

@@ -77,7 +77,6 @@ find_nn1 <- function(data, query, return_dist = FALSE) {
 
 
 
-
 #' Select a Space-Filling Subset of Points Using Maximin Sampling
 #'
 #' Implements a greedy maximin (farthest-point) selection algorithm to extract
@@ -205,8 +204,8 @@ slice_event_window <- function(
     timeline,
     days.before = 365,
     total.days  = 5 * 365,
-    month.start = 1
-) {
+    month.start = 1) {
+
   timeline <- as.Date(timeline)
   t_min <- min(timeline)
   t_max <- max(timeline)
@@ -279,6 +278,11 @@ slice_event_window <- function(
   if (single_input) out <- out[[1]]
   out
 }
+
+
+
+
+
 #' Find Consecutive Sequences Below a Threshold
 #'
 #' Identifies all sequences of consecutive values in a numeric vector
