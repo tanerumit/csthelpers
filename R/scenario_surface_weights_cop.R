@@ -194,7 +194,7 @@
 #' @return Data frame with scenario_grid columns plus one weight column per group.
 #'
 #' @export
-compute_scenario_surface_weights_copula <- function(
+compute_scenario_surface_weights_cop <- function(
     ensemble_data,
     scenario_grid,
     pr_col = "prcp",
@@ -308,8 +308,8 @@ compute_scenario_surface_weights_copula <- function(
   # Loop over groups (split() for efficiency)
   # ---------------------------------------------------------------------------
 
-  out <- scenario_grid
-  existing_cols <- names(out)
+  # Collect per-scenario long outputs and bind at the end.
+  out_list <- list()
   skipped <- character(0)
 
   diag_bw <- list()
@@ -522,13 +522,22 @@ compute_scenario_surface_weights_copula <- function(
 
     if (normalize) weights <- .scenwgt_normalize_vec(weights)
 
-    # Output col
-    col_name <- .scenwgt_unique_colname(grp, existing_cols)
-    existing_cols <- c(existing_cols, col_name)
-    out[[col_name]] <- weights
+    # Long-format output: one row per grid point per scenario
+    out_list[[length(out_list) + 1L]] <- .scenwgt_make_long_surface(
+      scenario_grid = scenario_grid,
+      scenario = as.character(grp),
+      weight = weights
+    )
   }
 
-  out <- .scenwgt_order_weight_cols(out, scenario_grid)
+  if (length(out_list) == 0L) {
+    out <- scenario_grid[0, , drop = FALSE]
+    out$scenario <- character(0)
+    out$weight <- numeric(0)
+  } else {
+    out <- do.call(rbind, out_list)
+    rownames(out) <- NULL
+  }
 
   attr(out, "skipped_groups") <- if (length(skipped) > 0L) skipped else character(0)
 
@@ -900,7 +909,7 @@ copula_goodness_of_fit <- function(
 
 #' Compute GoF diagnostics within the copula weight estimation loop
 #'
-#' This is a lightweight wrapper for use inside compute_scenario_surface_weights_copula.
+#' This is a lightweight wrapper for use inside compute_scenario_surface_weights_cop.
 #' Uses pseudo-observations already computed from KDE CDFs.
 #'
 #' @param u_ta,u_pr Pseudo-observations from KDE CDF (clamped to (0,1))

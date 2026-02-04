@@ -39,7 +39,8 @@ gcm_use <- gcm_data  |>
   tidyr::drop_na()
 
 # Impacts/output table for later weighting (used in the last section).
-str_out <- read_csv("data/s4w_rhine_strtest_Q50.csv")
+str_out <- read_csv("data/s4w_rhine_strtest_Q50.csv") |>
+  pivot_longer(-strid, names_to = "location", values_to = "value")
 
 # Plot limits derived from the grid (ensures comparable facets across methods).
 xlim <- range(str_grid$tavg, na.rm = TRUE)
@@ -79,14 +80,11 @@ w_kde <- compute_scenario_surface_weights_kde(
   verbose       = verbose
 )
 
-w_kde_long <- w_kde  |>
-  pivot_longer(ssp126:ssp585, names_to = "scenario", values_to = "value")
-
 p_kde <- plot_kde(
-  kde_grid   = w_kde_long,
+  kde_grid   = w_kde,
   samples    = gcm_use,
   facet_col  = "scenario",
-  z_col      = "value",
+  z_col      = "weight",
   x_limits   = xlim,
   y_limits   = ylim
 ) + ggtitle("KDE")
@@ -97,7 +95,7 @@ p_kde
 # --------------------------------------
 
 # MVN: parametric (mean + covariance) per scenario; smooth and stable if fit is sane.
-w_mvn <- compute_scenario_surface_weights_mvnorm(
+w_mvn <- compute_scenario_surface_weights_mvn(
   ensemble_data = gcm_use,
   scenario_grid = str_grid,
   pr_col        = pr_col,
@@ -109,21 +107,15 @@ w_mvn <- compute_scenario_surface_weights_mvnorm(
   verbose       = verbose
 )
 
-w_mvn_long <- w_mvn  |>
-  pivot_longer(ssp126:ssp585, names_to = "scenario", values_to = "value")
-
-
 p_mvn  <- plot_kde(
-  kde_grid   = w_mvn_long,
+  kde_grid   = w_mvn,
   samples    = gcm_use,
   facet_col  = "scenario",
-  z_col      = "value",
+  z_col      = "weight",
   x_limits   = xlim,
   y_limits   = ylim
 ) + ggtitle("MVN")
 p_mvn
-
-
 
 # --------------------------------------
 # 3C) Gaussian copula
@@ -132,7 +124,7 @@ p_mvn
 # Copula: models dependence separately from marginals; can capture non-elliptical
 # dependencies better than MVN, but Gaussian copula still implies Gaussian dependence
 # structure in rank space (tail dependence limitations).
-w_cop <- compute_scenario_surface_weights_copula(
+w_cop <- compute_scenario_surface_weights_cop(
   ensemble_data = gcm_use,
   scenario_grid = str_grid,
   pr_col        = pr_col,
@@ -144,15 +136,12 @@ w_cop <- compute_scenario_surface_weights_copula(
   verbose       = verbose
 )
 
-w_cop_long <- w_cop  |>
-  pivot_longer(ssp126:ssp585, names_to = "scenario", values_to = "value")
-
 
 p_copula <- plot_kde(
-  kde_grid   = w_cop_long,
+  kde_grid   = w_cop,
   samples    = gcm_use,
   facet_col  = "scenario",
-  z_col      = "value",
+  z_col      = "weight",
   x_limits   = xlim,
   y_limits   = ylim
 ) + ggtitle("Copula")
@@ -160,12 +149,13 @@ p_copula <- plot_kde(
 p_copula
 
 # ------------------------------------------------------------------------------
-# 4) Evaluate weight surfaces (same evaluator for all)
+# 4) Evaluate scenario surface weights
 # ------------------------------------------------------------------------------
 
 # Evaluation uses the same mapping + scoring parameters for fairness.
 # mapping = "knn" implies: at each GCM sample point, map it to the grid via KNN,
 # then score how well the surface represents the ensemble (per your evaluator).
+
 mapping       <- "knn"
 k_neighbors   <- 5
 tail_quantile <- 0.1  # lower/upper tails (10% and 90%) define "tail" regions
@@ -224,31 +214,22 @@ comparison$comparison
 # 5) Apply weights to impacts for a site (example)
 # ------------------------------------------------------------------------------
 
-str_out_long <- str_out  |>
-  pivot_longer(-strid, names_to = "location", values_to = "value")
-
-w_kde_long <- w_kde  |>
-  pivot_longer(ssp126:ssp585, names_to = "scenario", values_to = "value")  |>
-  select(-rlz)
-
 scn_wght <- str_lookup |>
-  left_join(w_kde_long |> select(-strid),by = c("tavg", "prcp"), relationship = "many-to-many")
+  left_join(w_kde |> select(-strid, -rlz), by = c("tavg", "prcp"), relationship = "many-to-many")
 
 # Custom columns
 result <- compute_weighted_impacts(
   scenario_weights = scn_wght,
   impact_data = str_out_long,
-  scenario_cols = list(scenario = c("scenario"), weight = "value"),
+  scenario_cols = list(scenario = c("scenario"), weight = "weight"),
   impact_cols = list(location = "location", value = "value"),
   realization_agg_fn = min, #stats::median,
   return_detail = TRUE
 )
 
 # Summary: median weighted impact per scenario (typically 4 rows for SSPs)
-weighted_lobith$summary
+result$summary
 
 # Detail: weighted impact per scenario per realization (dimensions depend on your inputs)
-weighted_lobith$by_realization
+result$by_realization
 
-
-result$summary |> filter(location == "Lobith")

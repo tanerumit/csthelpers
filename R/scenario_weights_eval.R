@@ -282,16 +282,35 @@ loo_stability <- function(weight_fn, ensemble_data, scenario_grid, group, group_
 
   if (n < 5) return(NA_real_)  # Need enough data for LOO
 
+  # Helper: extract weight vector from either a numeric vector (legacy)
+  # or a long-format weight surface with a `weight` column.
+  .extract_w <- function(x) {
+    if (is.numeric(x) && !is.matrix(x) && !is.data.frame(x)) {
+      return(as.numeric(x))
+    }
+    if (is.data.frame(x)) {
+      if (!("weight" %in% names(x))) {
+        stop("weight_fn returned a data.frame without a 'weight' column.", call. = FALSE)
+      }
+      if ("scenario" %in% names(x)) {
+        x <- x[x$scenario == group, , drop = FALSE]
+      }
+      return(as.numeric(x$weight))
+    }
+    stop("weight_fn must return either a numeric weight vector or a data.frame with a 'weight' column.",
+         call. = FALSE)
+  }
+
   # Fit full model
   tryCatch({
-    w_full <- weight_fn(group_data, scenario_grid)
+    w_full <- .extract_w(weight_fn(group_data, scenario_grid))
     w_full <- w_full / sum(w_full, na.rm = TRUE)
 
     # LOO fits
     w_loo <- matrix(NA_real_, nrow = length(w_full), ncol = n)
 
     for (i in seq_len(n)) {
-      w_i <- weight_fn(group_data[-i, , drop = FALSE], scenario_grid)
+      w_i <- .extract_w(weight_fn(group_data[-i, , drop = FALSE], scenario_grid))
       w_loo[, i] <- w_i / sum(w_i, na.rm = TRUE)
     }
 
@@ -348,33 +367,55 @@ evaluate_scenario_surface_weights <- function(
   mapping <- match.arg(mapping)
 
   # ---------------------------------------------------------------------------
-  # Identify grid columns and weight columns
+  # Validate long-format surface and align groups
   # ---------------------------------------------------------------------------
 
-  if (!all(c(ta_col, pr_col) %in% names(weight_surface))) {
-    stop("weight_surface must contain columns: ", ta_col, ", ", pr_col)
+  required_surface_cols <- c(ta_col, pr_col, "scenario", "weight")
+  missing_surface_cols <- setdiff(required_surface_cols, names(weight_surface))
+  if (length(missing_surface_cols) > 0L) {
+    stop(
+      "weight_surface must be long-format with columns: ",
+      paste(required_surface_cols, collapse = ", "),
+      ". Missing: ", paste(missing_surface_cols, collapse = ", "),
+      call. = FALSE
+    )
   }
 
-  grid_cols <- c(ta_col, pr_col)
-  potential_weight_cols <- setdiff(names(weight_surface), grid_cols)
+  if (!is.numeric(weight_surface$weight)) {
+    stop("weight_surface$weight must be numeric.", call. = FALSE)
+  }
+  if (any(!is.na(weight_surface$weight) & weight_surface$weight < 0)) {
+    stop("weight_surface$weight must be non-negative.", call. = FALSE)
+  }
 
-  # Identify which columns are actually weight columns (numeric, non-negative)
-  weight_cols <- potential_weight_cols[sapply(potential_weight_cols, function(col) {
-    x <- weight_surface[[col]]
-    is.numeric(x) && all(is.na(x) | x >= 0)
-  })]
-
-  # Match to groups in ensemble_data
   groups_in_data <- unique(ensemble_data[[group_col]])
-  weight_cols <- intersect(weight_cols, make.names(groups_in_data))
+  groups_in_surface <- unique(weight_surface$scenario)
 
-  if (length(weight_cols) == 0) {
-    stop("No valid weight columns found matching groups in ensemble_data")
+  groups <- intersect(as.character(groups_in_data), as.character(groups_in_surface))
+  if (length(groups) == 0L) {
+    stop("No overlapping scenarios between ensemble_data[[group_col]] and weight_surface$scenario.",
+         call. = FALSE)
   }
 
-  ta_grid <- weight_surface[[ta_col]]
-  pr_grid <- weight_surface[[pr_col]]
-  n_grid <- nrow(weight_surface)
+  # Establish a reference grid ordering using the first available group.
+  .order_surface <- function(df) {
+    df[order(df[[ta_col]], df[[pr_col]]), , drop = FALSE]
+  }
+
+  ref_grp <- groups[1]
+  ref_df <- weight_surface[as.character(weight_surface$scenario) == ref_grp, , drop = FALSE]
+  ref_df <- .order_surface(ref_df)
+
+  if (nrow(ref_df) == 0L) {
+    stop("weight_surface contains no rows for scenario '", ref_grp, "'.", call. = FALSE)
+  }
+
+  ta_grid <- ref_df[[ta_col]]
+  pr_grid <- ref_df[[pr_col]]
+  n_grid <- nrow(ref_df)
+
+  # Scenario grid passed to refit_fn/LOO robustness: ta/pr grid only.
+  scenario_grid_refit <- ref_df[, c(ta_col, pr_col), drop = FALSE]
 
   # ---------------------------------------------------------------------------
   # Per-group evaluation
@@ -382,16 +423,27 @@ evaluate_scenario_surface_weights <- function(
 
   results_list <- list()
 
-  for (grp in weight_cols) {
+  for (grp in groups) {
 
     if (isTRUE(verbose)) message("Evaluating group: ", grp)
 
-    # Get weights and observations
-    w <- weight_surface[[grp]]
+    # Get weights and validate that the grid matches the reference grid
+    df_w <- weight_surface[as.character(weight_surface$scenario) == grp, , drop = FALSE]
+    df_w <- .order_surface(df_w)
 
-    # Map back to original group name
-    grp_original <- groups_in_data[make.names(groups_in_data) == grp][1]
-    obs_data <- ensemble_data[ensemble_data[[group_col]] == grp_original, , drop = FALSE]
+    if (nrow(df_w) != n_grid) {
+      stop("Scenario '", grp, "' has ", nrow(df_w), " grid rows; expected ", n_grid,
+           " (must match across scenarios).", call. = FALSE)
+    }
+
+    if (!isTRUE(all.equal(df_w[[ta_col]], ta_grid, check.attributes = FALSE)) ||
+        !isTRUE(all.equal(df_w[[pr_col]], pr_grid, check.attributes = FALSE))) {
+      stop("Grid (", ta_col, ", ", pr_col, ") does not match across scenarios after ordering.",
+           call. = FALSE)
+    }
+
+    w <- df_w$weight
+    obs_data <- ensemble_data[as.character(ensemble_data[[group_col]]) == grp, , drop = FALSE]
 
     ta_obs <- obs_data[[ta_col]]
     pr_obs <- obs_data[[pr_col]]
@@ -423,14 +475,14 @@ evaluate_scenario_surface_weights <- function(
 
     # --- Robustness (if refit function provided) ---
     loo_stab <- if (!is.null(refit_fn)) {
-      loo_stability(refit_fn, ensemble_data, weight_surface[, grid_cols], grp_original, group_col)
+      loo_stability(refit_fn, ensemble_data, scenario_grid_refit, grp, group_col)
     } else {
       NA_real_
     }
 
     # Compile results
     res <- data.frame(
-      group = grp_original,
+      group = grp,
       n_obs = n_obs,
       n_grid = n_grid,
 

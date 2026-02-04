@@ -300,3 +300,48 @@
   col_name
 }
 
+#' Create long-format weight surface rows for a single scenario
+#'
+#' @description
+#' Internal helper to standardize long-format outputs across scenario surface
+#' weight estimation methods.
+#'
+#' @details
+#' Returns `scenario_grid` with two appended columns:
+#' - `scenario`: scenario/group label (character)
+#' - `weight`: numeric weights evaluated on the scenario surface grid
+#'
+#' This helper performs basic validation to fail early on length mismatches.
+#'
+#' @param scenario_grid Data frame. The base surface grid.
+#' @param scenario Character scalar. Scenario/group label.
+#' @param weight Numeric vector length `nrow(scenario_grid)`.
+#'
+#' @return Data frame with `scenario_grid` columns plus `scenario` and `weight`.
+#'
+#' @keywords internal
+.scenwgt_make_long_surface <- function(scenario_grid, scenario, weight) {
+
+  if (!is.data.frame(scenario_grid)) {
+    stop("scenario_grid must be a data.frame.", call. = FALSE)
+  }
+  if (!is.character(scenario) || length(scenario) != 1L || !nzchar(scenario)) {
+    stop("scenario must be a single non-empty character string.", call. = FALSE)
+  }
+  if (!is.numeric(weight)) {
+    stop("weight must be numeric.", call. = FALSE)
+  }
+  if (length(weight) != nrow(scenario_grid)) {
+    stop(
+      "weight length (", length(weight), ") does not match nrow(scenario_grid) (",
+      nrow(scenario_grid), ").",
+      call. = FALSE
+    )
+  }
+
+  out <- scenario_grid
+  out$scenario <- scenario
+  out$weight <- weight
+  out
+}
+

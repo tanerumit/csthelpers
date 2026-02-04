@@ -97,13 +97,15 @@
 #' @param diagnostics Logical; attach diagnostic attributes?
 #' @param verbose Logical; print progress messages?
 #'
-#' @return Data frame with scenario_grid columns plus one weight column per group.
+#' @return Data frame in long format with `scenario_grid` columns plus:
+#' - `scenario`: scenario/group label
+#' - `weight`: numeric weights per grid point
 #'
 #' @importFrom MASS cov.trob
 #' @importFrom dplyr filter
 #' @importFrom rlang .data
 #' @export
-compute_scenario_surface_weights_mvnorm <- function(
+compute_scenario_surface_weights_mvn <- function(
     ensemble_data,
     scenario_grid,
     pr_col = "prcp",
@@ -185,8 +187,8 @@ compute_scenario_surface_weights_mvnorm <- function(
   # Loop over groups (FIX 3.2: use split())
   # ---------------------------------------------------------------------------
 
-  out <- scenario_grid
-  existing_cols <- names(out)
+  # Collect per-scenario long outputs and bind at the end.
+  out_list <- list()
   skipped <- character(0)
 
   diag_mvn_params <- list()
@@ -316,13 +318,22 @@ compute_scenario_surface_weights_mvnorm <- function(
 
     if (normalize) weights <- .scenwgt_normalize_vec(weights)
 
-    # FIX 2.2: Check for duplicate column names
-    col_name <- .scenwgt_unique_colname(grp, existing_cols)
-    existing_cols <- c(existing_cols, col_name)
-    out[[col_name]] <- weights
+    # Long-format output: one row per grid point per scenario
+    out_list[[length(out_list) + 1L]] <- .scenwgt_make_long_surface(
+      scenario_grid = scenario_grid,
+      scenario = as.character(grp),
+      weight = weights
+    )
   }
 
-  out <- .scenwgt_order_weight_cols(out, scenario_grid)
+  if (length(out_list) == 0L) {
+    out <- scenario_grid[0, , drop = FALSE]
+    out$scenario <- character(0)
+    out$weight <- numeric(0)
+  } else {
+    out <- do.call(rbind, out_list)
+    rownames(out) <- NULL
+  }
 
   # Attributes
   attr(out, "skipped_groups") <- if (length(skipped) > 0L) skipped else character(0)
@@ -340,4 +351,18 @@ compute_scenario_surface_weights_mvnorm <- function(
   }
 
   out
+}
+
+#' Deprecated: use compute_scenario_surface_weights_mvn()
+#'
+#' @description
+#' Backwards-compatible wrapper for the previous function name.
+#'
+#' @inheritParams compute_scenario_surface_weights_mvn
+#'
+#' @return See compute_scenario_surface_weights_mvn.
+#' @export
+compute_scenario_surface_weights_mvnorm <- function(...) {
+  .Deprecated("compute_scenario_surface_weights_mvn")
+  compute_scenario_surface_weights_mvn(...)
 }
