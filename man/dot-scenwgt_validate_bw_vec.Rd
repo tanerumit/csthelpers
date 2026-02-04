@@ -6,7 +6,18 @@
 \usage{
 .scenwgt_validate_bw_vec(bw_vec)
 }
+\arguments{
+\item{bw_vec}{Numeric vector of length 2. Units: `[ta units, pr units]`.}
+}
+\value{
+Logical scalar; `TRUE` if `bw_vec` is valid, otherwise `FALSE`.
+}
 \description{
-Validate a 2D bandwidth vector
+Internal predicate to validate a 2D KDE bandwidth vector `c(bw_ta, bw_pr)`.
+}
+\details{
+A valid bandwidth vector is numeric, length 2, finite, and strictly positive.
+Bandwidth units must match the units of the (possibly scaled) temperature and
+precipitation inputs used by the KDE.
 }
 \keyword{internal}

@@ -2,7 +2,7 @@
 % Please edit documentation in R/scenario_surface_weights_kde.R
 \name{.scenwgt_pick_bw_auto}
 \alias{.scenwgt_pick_bw_auto}
-\title{Auto bandwidth with optional plug-in method}
+\title{Select an automatic bandwidth with optional plug-in method and safety bounds}
 \usage{
 .scenwgt_pick_bw_auto(
   ta,
@@ -16,7 +16,47 @@
   bw_method = c("auto", "plugin", "nrd")
 )
 }
+\arguments{
+\item{ta}{Numeric vector (finite) of temperature values in the evaluation scale.}
+
+\item{pr}{Numeric vector (finite) of precipitation values in the evaluation scale.}
+
+\item{dT}{Numeric scalar; grid step in the temperature dimension (>= 0). Units: `ta units`.}
+
+\item{dP}{Numeric scalar; grid step in the precipitation dimension (>= 0). Units: `pr units`.}
+
+\item{k}{Numeric length-2; multipliers for grid-step floor. Dimensionless.}
+
+\item{alpha}{Numeric scalar > 0; multiplier applied to the data-driven bandwidth.}
+
+\item{bw_min}{Numeric length-2; elementwise lower bounds (>= 0).}
+
+\item{bw_max}{Numeric length-2; elementwise upper bounds (> 0 or `Inf`).}
+
+\item{bw_method}{Character; one of `"auto"`, `"plugin"`, `"nrd"`.}
+}
+\value{
+Numeric length-2 bandwidth vector `c(bw_ta, bw_pr)` or `NULL`.
+}
 \description{
-Auto bandwidth with optional plug-in method
+Chooses a bandwidth vector for 2D Gaussian product-kernel KDE by combining
+(i) a grid-step-based floor and (ii) a data-driven estimate, then clamping to
+user-specified min/max bounds.
+}
+\details{
+The bandwidth is computed in three stages:
+1. **Grid floor:** `bw_grid = c(k[1] * dT, k[2] * dP)` where `dT`/`dP` are the
+   grid steps (in the **current scale** used for evaluation).
+2. **Data-driven:** either plug-in (`ks::Hpi`) or NRD (per-dimension), selected
+   by `bw_method`, with controlled fallback behavior when plug-in fails.
+3. **Combine + clamp:** `bw_use = pmax(bw_grid, alpha * bw_data)` then clamped
+   elementwise to `[bw_min, bw_max]`.
+
+Returns `NULL` if a valid bandwidth cannot be produced after clamping/validation.
+
+Assumptions:
+- `ta` and `pr` are finite and have non-negligible variance.
+- `dT` and `dP` are non-negative and represent grid resolution in the same scale
+  as `ta`/`pr` passed to this function.
 }
 \keyword{internal}

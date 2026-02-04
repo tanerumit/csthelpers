@@ -16,6 +16,6 @@ testthat::test_that("plot_kde returns ggplot for valid inputs", {
     prcp = c(0.2, 0.8)
   )
 
-  p <- plot_kde(kde_long, obs, bins = 3, raster_interpolate = FALSE)
+  p <- plot_kde(kde_long, obs, n_contours = 3, interpolate_raster = FALSE)
   testthat::expect_s3_class(p, "ggplot")
 })

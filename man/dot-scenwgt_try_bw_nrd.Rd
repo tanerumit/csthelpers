@@ -2,11 +2,25 @@
 % Please edit documentation in R/scenario_surface_weights_kde.R
 \name{.scenwgt_try_bw_nrd}
 \alias{.scenwgt_try_bw_nrd}
-\title{Try 1D NRD bandwidth}
+\title{Try 1D NRD bandwidth (diagonal 2D) for temperature and precipitation}
 \usage{
 .scenwgt_try_bw_nrd(ta, pr)
 }
+\arguments{
+\item{ta}{Numeric vector of temperature values (finite). Units: `ta units`.}
+
+\item{pr}{Numeric vector of precipitation values (finite). Units: `pr units`.}
+}
+\value{
+Numeric vector `c(bw_ta, bw_pr)` or `NULL` if estimation fails.
+}
 \description{
-Try 1D NRD bandwidth
+Estimates separate 1D NRD bandwidths for `ta` and `pr` and returns them as a
+diagonal 2D bandwidth vector `c(bw_ta, bw_pr)`.
+}
+\details{
+This is a pragmatic fallback when plug-in multivariate bandwidth estimation is
+unavailable or unstable. The underlying helper `.kde_try_nrd_2d()` is expected
+to return a 2x2 diagonal bandwidth matrix or `NULL`.
 }
 \keyword{internal}

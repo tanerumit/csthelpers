@@ -213,6 +213,9 @@ compute_scenario_surface_weights_copula <- function(
     weights_col = NULL,
     support = NULL,
     chunk_size = 5000L,
+    gof_diagnostics = TRUE,
+    gof_n_grid = 10L,
+    gof_warn_threshold = 0.05,
     diagnostics = FALSE,
     verbose = TRUE
 ) {
@@ -311,6 +314,7 @@ compute_scenario_surface_weights_copula <- function(
 
   diag_bw <- list()
   diag_rho <- list()
+  diag_gof <- list()
   diag_eff_n <- list()
   diag_scaling <- list()
   diag_bw_method <- list()
@@ -458,6 +462,22 @@ compute_scenario_surface_weights_copula <- function(
       message(sprintf("[COPULA] Group=%s | rho=%.3f", grp, rho))
     }
 
+    # Goodness-of-fit diagnostic
+    if (diagnostics && gof_diagnostics) {
+      gof_result <- .scenwgt_copula_gof(
+        u_ta = u_ta_obs,
+        u_pr = u_pr_obs,
+        rho = rho,
+        w_obs = w_obs,
+        grp = grp,
+        verbose = verbose,
+        n_grid = gof_n_grid,
+        warn_threshold = gof_warn_threshold
+      )
+      diag_gof[[grp]] <- gof_result
+    }
+
+
     # -------------------------------------------------------------------------
     # Evaluate joint density on the evaluation surface
     # -------------------------------------------------------------------------
@@ -525,5 +545,449 @@ compute_scenario_surface_weights_copula <- function(
     )
   }
 
+  if (diagnostics && gof_diagnostics) {
+        attr(out, "copula_gof") <- diag_gof
+  }
+
   out
+}
+
+
+
+# ==============================================================================
+# Copula Goodness-of-Fit Diagnostics
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Bivariate Normal CDF (pure R, no dependencies)
+# ------------------------------------------------------------------------------
+
+#' Bivariate normal CDF via Drezner-Wesolowsky (1990) approximation
+#'
+#' Computes P(X <= x, Y <= y) where (X,Y) ~ BVN(0, 0, 1, 1, rho).
+#' Accuracy: ~1e-7 for |rho| < 0.925, slightly less at extremes.
+#'
+#' @param x,y Upper integration limits (scalars)
+#' @param rho Correlation coefficient
+#' @return Probability P(X <= x, Y <= y)
+#' @keywords internal
+.scenwgt_bvn_cdf_scalar <- function(x, y, rho) {
+
+
+  # Edge cases
+
+  if (!is.finite(x) || !is.finite(y) || !is.finite(rho)) return(NA_real_)
+
+
+  if (x == -Inf || y == -Inf) return(0)
+  if (x == Inf) return(stats::pnorm(y))
+  if (y == Inf) return(stats::pnorm(x))
+
+  if (abs(rho) < 1e-10) return(stats::pnorm(x) * stats::pnorm(y))
+
+  if (rho > 0.9999) return(stats::pnorm(min(x, y)))
+  if (rho < -0.9999) return(max(0, stats::pnorm(x) + stats::pnorm(y) - 1))
+
+
+  # Drezner-Wesolowsky Gauss-Legendre quadrature weights and abscissae
+  # 6-point rule (sufficient for ~1e-6 accuracy)
+  w <- c(0.1713244923791704, 0.3607615730481386, 0.4679139345726910)
+  t <- c(0.9324695142031521, 0.6612093864662645, 0.2386191860831969)
+
+  # Extend to full symmetric set
+  weights <- c(w, rev(w))
+  abscissae <- c(-t, rev(t))
+
+  # Transform to [0, rho] interval
+  rho_half <- rho / 2
+  sum_val <- 0
+
+  for (i in seq_along(weights)) {
+    r <- rho_half * abscissae[i] + rho_half
+    one_minus_r2 <- 1 - r * r
+
+    if (one_minus_r2 <= .Machine$double.eps) next
+
+    sqrt_omr2 <- sqrt(one_minus_r2)
+    asr <- asin(r)
+
+    # Integrand
+    sn <- sin(asr)
+    cs <- cos(asr)
+
+    val1 <- exp(-(x * x + y * y - 2 * sn * x * y) / (2 * cs * cs))
+    sum_val <- sum_val + weights[i] * val1
+  }
+
+  # Final assembly
+  result <- stats::pnorm(x) * stats::pnorm(y) + rho_half * sum_val / (2 * pi)
+
+  # Clamp to valid probability
+
+  max(0, min(1, result))
+}
+
+#' Vectorized bivariate normal CDF
+#' @keywords internal
+.scenwgt_bvn_cdf <- function(x, y, rho) {
+  n <- length(x)
+  if (length(y) != n) stop("x and y must have same length")
+
+  vapply(seq_len(n), function(i) {
+    .scenwgt_bvn_cdf_scalar(x[i], y[i], rho)
+  }, numeric(1))
+}
+
+# ------------------------------------------------------------------------------
+# Copula Functions for GoF
+# ------------------------------------------------------------------------------
+
+#' Gaussian copula CDF: C(u, v; rho) = Phi_2(qnorm(u), qnorm(v); rho)
+#' @keywords internal
+.scenwgt_gaussian_copula_cdf <- function(u, v, rho, eps = 1e-12) {
+
+  # Clamp to avoid qnorm(0) = -Inf
+
+  u <- pmax(eps, pmin(1 - eps, u))
+  v <- pmax(eps, pmin(1 - eps, v))
+
+  z1 <- stats::qnorm(u)
+  z2 <- stats::qnorm(v)
+
+  .scenwgt_bvn_cdf(z1, z2, rho)
+}
+
+#' Empirical copula at evaluation points
+#'
+#' C_n(u, v) = (1/n) * sum_i I(U_i <= u, V_i <= v)
+#' or weighted version if w_obs provided.
+#'
+#' @param u_eval,v_eval Evaluation points in (0,1)
+#' @param u_obs,v_obs Pseudo-observations in (0,1)
+#' @param w_obs Normalized weights (sum to 1)
+#' @keywords internal
+.scenwgt_empirical_copula <- function(u_eval, v_eval, u_obs, v_obs, w_obs = NULL) {
+
+  n_eval <- length(u_eval)
+  n_obs <- length(u_obs)
+
+  if (is.null(w_obs)) {
+    w_obs <- rep(1 / n_obs, n_obs)
+  }
+
+  # Vectorized: for each eval point, count weighted obs in lower-left quadrant
+  out <- numeric(n_eval)
+
+  for (i in seq_len(n_eval)) {
+    indicator <- (u_obs <= u_eval[i]) & (v_obs <= v_eval[i])
+    out[i] <- sum(w_obs[indicator])
+  }
+
+  out
+}
+
+#' Convert observations to rank-based pseudo-observations
+#'
+#' Standard approach: u_i = R_i / (n + 1) to avoid 0 and 1
+#'
+#' @keywords internal
+.scenwgt_rank_pseudo_obs <- function(x, w = NULL) {
+
+  n <- length(x)
+
+  if (is.null(w) || all(w == w[1])) {
+    # Unweighted: standard ranks
+    r <- rank(x, ties.method = "average")
+    return(r / (n + 1))
+  }
+
+  # Weighted ranks: cumulative weight up to and including each point
+  ord <- order(x)
+  w_sorted <- w[ord]
+  w_cumsum <- cumsum(w_sorted)
+  w_total <- sum(w)
+
+  # Assign midpoint of weight interval
+  w_lag <- c(0, w_cumsum[-n])
+  w_mid <- (w_lag + w_cumsum) / 2
+
+  # Map back to original order
+  u <- numeric(n)
+  u[ord] <- w_mid / w_total
+
+  u
+}
+
+# ------------------------------------------------------------------------------
+# Main Goodness-of-Fit Diagnostic
+# ------------------------------------------------------------------------------
+
+#' Copula Goodness-of-Fit Diagnostic
+#'
+#' Compares empirical copula to fitted Gaussian copula at a grid of quantile
+#' points. Returns overall discrepancy metrics and tail-specific diagnostics.
+#'
+#' @param u_obs,v_obs Pseudo-observations in (0,1), typically from KDE CDFs
+#' @param rho Fitted Gaussian copula correlation
+
+#' @param w_obs Optional normalized observation weights
+#' @param n_grid Number of grid points per dimension for comparison (default 10)
+#' @param tail_threshold Quantile threshold defining "tail" region (default 0.1)
+#' @param warn_threshold RMSE threshold above which to flag poor fit
+#'
+#' @return List with:
+#'   - `rmse`: Root mean squared error between empirical and fitted copula
+#'   - `max_abs_error`: Maximum absolute discrepancy
+#'   - `tail_lower_rmse`: RMSE in lower-left tail (both u,v < tail_threshold)
+#'   - `tail_upper_rmse`: RMSE in upper-right tail (both u,v > 1-tail_threshold)
+#'   - `tail_discrepancy`: Combined tail metric (max of lower/upper)
+#'   - `n_eval`: Number of evaluation points
+#'   - `poor_fit`: Logical flag if fit appears inadequate
+#'   - `poor_fit_reason`: Character explanation if flagged
+#'   - `grid`: Data frame of evaluation points and values (for plotting)
+#'
+#' @export
+copula_goodness_of_fit <- function(
+    u_obs,
+    v_obs,
+    rho,
+    w_obs = NULL,
+    n_grid = 10L,
+    tail_threshold = 0.1,
+    warn_threshold = 0.05
+) {
+
+
+  # Input validation
+  if (length(u_obs) != length(v_obs)) {
+    stop("u_obs and v_obs must have same length")
+  }
+
+  n_obs <- length(u_obs)
+
+  if (n_obs < 5L) {
+    return(list(
+      rmse = NA_real_,
+      max_abs_error = NA_real_,
+      tail_lower_rmse = NA_real_,
+      tail_upper_rmse = NA_real_,
+      tail_discrepancy = NA_real_,
+      n_eval = 0L,
+      poor_fit = NA,
+      poor_fit_reason = "Insufficient observations for GoF assessment",
+      grid = NULL
+    ))
+  }
+
+  if (!is.null(w_obs)) {
+    if (length(w_obs) != n_obs) stop("w_obs must match length of observations")
+    w_obs <- w_obs / sum(w_obs)
+  }
+
+  if (!is.finite(rho) || abs(rho) > 1) {
+    return(list(
+      rmse = NA_real_,
+      max_abs_error = NA_real_,
+      tail_lower_rmse = NA_real_,
+      tail_upper_rmse = NA_real_,
+      tail_discrepancy = NA_real_,
+      n_eval = 0L,
+      poor_fit = TRUE,
+      poor_fit_reason = "Invalid rho parameter",
+      grid = NULL
+    ))
+  }
+
+  # Evaluation grid: evenly spaced quantiles avoiding 0 and 1
+  q_seq <- seq(1 / (n_grid + 1), n_grid / (n_grid + 1), length.out = n_grid)
+  eval_grid <- expand.grid(u = q_seq, v = q_seq)
+  u_eval <- eval_grid$u
+  v_eval <- eval_grid$v
+  n_eval <- nrow(eval_grid)
+
+  # Compute empirical and fitted copula at grid points
+  C_emp <- .scenwgt_empirical_copula(u_eval, v_eval, u_obs, v_obs, w_obs)
+  C_fit <- .scenwgt_gaussian_copula_cdf(u_eval, v_eval, rho)
+
+  # Handle any NAs from numerical issues
+  valid <- is.finite(C_emp) & is.finite(C_fit)
+  if (sum(valid) < 4) {
+    return(list(
+      rmse = NA_real_,
+      max_abs_error = NA_real_,
+      tail_lower_rmse = NA_real_,
+      tail_upper_rmse = NA_real_,
+      tail_discrepancy = NA_real_,
+      n_eval = sum(valid),
+      poor_fit = NA,
+      poor_fit_reason = "Numerical issues in copula evaluation",
+      grid = NULL
+    ))
+  }
+
+  errors <- C_emp - C_fit
+
+  # Overall metrics
+  rmse <- sqrt(mean(errors[valid]^2))
+  max_abs_error <- max(abs(errors[valid]))
+
+
+  # Tail regions
+  lower_tail <- u_eval < tail_threshold & v_eval < tail_threshold
+  upper_tail <- u_eval > (1 - tail_threshold) & v_eval > (1 - tail_threshold)
+
+  tail_lower_rmse <- if (sum(lower_tail & valid) >= 1) {
+    sqrt(mean(errors[lower_tail & valid]^2))
+  } else NA_real_
+
+  tail_upper_rmse <- if (sum(upper_tail & valid) >= 1) {
+    sqrt(mean(errors[upper_tail & valid]^2))
+  } else NA_real_
+
+  tail_discrepancy <- max(c(tail_lower_rmse, tail_upper_rmse), na.rm = TRUE)
+  if (!is.finite(tail_discrepancy)) tail_discrepancy <- NA_real_
+
+  # Assess fit quality
+  poor_fit <- FALSE
+  poor_fit_reason <- NULL
+
+  if (rmse > warn_threshold) {
+    poor_fit <- TRUE
+    poor_fit_reason <- sprintf(
+      "Overall RMSE (%.4f) exceeds threshold (%.4f); consider non-Gaussian copula",
+      rmse, warn_threshold
+    )
+  }
+
+  # Tail dependence check: Gaussian copula has zero tail dependence
+
+  # If empirical shows strong tail dependence, flag it
+  tail_warn_mult <- 2.0
+  if (is.finite(tail_discrepancy) && tail_discrepancy > tail_warn_mult * rmse && tail_discrepancy > warn_threshold) {
+    poor_fit <- TRUE
+    tail_reason <- sprintf(
+      "Tail RMSE (%.4f) >> overall RMSE (%.4f); data may have tail dependence (consider Clayton/Gumbel copula)",
+      tail_discrepancy, rmse
+    )
+    poor_fit_reason <- if (is.null(poor_fit_reason)) tail_reason else paste(poor_fit_reason, tail_reason, sep = "; ")
+  }
+
+  # Build grid output for optional plotting
+  grid_out <- data.frame(
+    u = u_eval,
+    v = v_eval,
+    C_empirical = C_emp,
+    C_fitted = C_fit,
+    error = errors
+  )
+
+  list(
+    rmse = rmse,
+    max_abs_error = max_abs_error,
+    tail_lower_rmse = tail_lower_rmse,
+    tail_upper_rmse = tail_upper_rmse,
+    tail_discrepancy = tail_discrepancy,
+    n_eval = sum(valid),
+    poor_fit = poor_fit,
+    poor_fit_reason = poor_fit_reason,
+    grid = grid_out
+  )
+}
+
+# ------------------------------------------------------------------------------
+# Integration helper for main copula function
+# ------------------------------------------------------------------------------
+
+#' Compute GoF diagnostics within the copula weight estimation loop
+#'
+#' This is a lightweight wrapper for use inside compute_scenario_surface_weights_copula.
+#' Uses pseudo-observations already computed from KDE CDFs.
+#'
+#' @param u_ta,u_pr Pseudo-observations from KDE CDF (clamped to (0,1))
+#' @param rho Fitted correlation
+#' @param w_obs Observation weights
+#' @param grp Group name for messaging
+#' @param verbose Print warnings?
+#' @param n_grid Grid resolution for GoF
+#' @param warn_threshold RMSE threshold
+#'
+#' @return GoF result list
+#' @keywords internal
+.scenwgt_copula_gof <- function(
+    u_ta, u_pr, rho, w_obs,
+    grp = NULL,
+    verbose = FALSE,
+    n_grid = 10L,
+    warn_threshold = 0.05
+) {
+
+  gof <- copula_goodness_of_fit(
+    u_obs = u_ta,
+    v_obs = u_pr,
+    rho = rho,
+    w_obs = w_obs,
+    n_grid = n_grid,
+    warn_threshold = warn_threshold
+  )
+
+  if (isTRUE(verbose) && isTRUE(gof$poor_fit)) {
+    grp_label <- if (!is.null(grp)) paste0(" (group '", grp, "')") else ""
+    warning("[COPULA GoF]", grp_label, ": ", gof$poor_fit_reason, call. = FALSE)
+  }
+
+  gof
+}
+
+# ------------------------------------------------------------------------------
+# Plotting utility (optional)
+# ------------------------------------------------------------------------------
+
+#' Plot Copula Goodness-of-Fit Comparison
+#'
+#' Visualizes empirical vs fitted copula discrepancies.
+#'
+#' @param gof_result Output from copula_goodness_of_fit()
+#' @param title Optional plot title
+#'
+#' @return ggplot object (requires ggplot2)
+#' @export
+plot_copula_gof <- function(gof_result, title = "Copula Goodness-of-Fit") {
+
+
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("ggplot2 required for plotting")
+  }
+
+  if (is.null(gof_result$grid)) {
+    stop("No grid data available in GoF result")
+  }
+
+  grid <- gof_result$grid
+
+  # Error heatmap
+  p <- ggplot2::ggplot(grid, ggplot2::aes(x = u, y = v, fill = error)) +
+    ggplot2::geom_tile() +
+    ggplot2::scale_fill_gradient2(
+      low = "blue", mid = "white", high = "red",
+      midpoint = 0,
+      name = "C_emp - C_fit"
+    ) +
+    ggplot2::labs(
+      title = title,
+      subtitle = sprintf("RMSE: %.4f | Max |error|: %.4f | Tail RMSE: %.4f",
+                         gof_result$rmse,
+                         gof_result$max_abs_error,
+                         gof_result$tail_discrepancy),
+      x = "u (temperature quantile)",
+      y = "v (precipitation quantile)"
+    ) +
+    ggplot2::theme_minimal() +
+    ggplot2::coord_fixed()
+
+  # Add corner annotations if poor fit
+  if (isTRUE(gof_result$poor_fit)) {
+    p <- p + ggplot2::labs(caption = gof_result$poor_fit_reason)
+  }
+
+  p
 }

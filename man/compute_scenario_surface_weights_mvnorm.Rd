@@ -2,7 +2,7 @@
 % Please edit documentation in R/scenario_surface_weights_mvnorm.R
 \name{compute_scenario_surface_weights_mvnorm}
 \alias{compute_scenario_surface_weights_mvnorm}
-\title{Calculate Climate-Informed Scenario Weights (KDE; external per-row weights)}
+\title{Calculate Climate-Informed Scenario Weights (MVN; external per-row weights)}
 \usage{
 compute_scenario_surface_weights_mvnorm(
   ensemble_data,
@@ -32,6 +32,8 @@ compute_scenario_surface_weights_mvnorm(
 
 \item{group_col}{Column name for grouping (e.g., scenario).}
 
+\item{robust}{Logical; use robust covariance estimation?}
+
 \item{min_samples}{Minimum observations required per group.}
 
 \item{normalize}{Logical; normalize to PMF?}
@@ -40,33 +42,19 @@ compute_scenario_surface_weights_mvnorm(
 
 \item{scale}{Scaling method: "none", "global", or "by_group".}
 
-\item{weights_col}{Optional column with per-row weights.}
+\item{weights_col}{Optional column with per-row weights (incompatible with robust=TRUE).}
 
 \item{support}{Optional list with ta and/or pr bounds.}
 
 \item{diagnostics}{Logical; attach diagnostic attributes?}
 
 \item{verbose}{Logical; print progress messages?}
-
-\item{bw}{Optional user-specified bandwidth vector c(bw_ta, bw_pr).}
-
-\item{bw_method}{Bandwidth selection method: "auto", "plugin", or "nrd".}
-
-\item{k}{Grid-step multipliers for bandwidth floor.}
-
-\item{alpha}{Multiplier for data-driven bandwidth.}
-
-\item{bw_min}{Minimum bandwidth bounds.}
-
-\item{bw_max}{Maximum bandwidth bounds.}
-
-\item{chunk_size}{Grid evaluation chunk size.}
 }
 \value{
 Data frame with scenario_grid columns plus one weight column per group.
 }
 \description{
-For each group (e.g., SSP), fits a 2D Gaussian product-kernel KDE to ensemble
-(ta, pr) points and evaluates it on `scenario_grid`. If `normalize=TRUE`, returns
-a discrete PMF over grid points (optionally area-weighted for regular grids).
+For each group, fits a bivariate normal distribution to (ta, pr) and evaluates
+its density on `scenario_grid`. If `normalize=TRUE`, returns a discrete PMF over
+grid points (optionally area-weighted for regular grids).
 }

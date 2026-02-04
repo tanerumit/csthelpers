@@ -2,27 +2,117 @@
 % Please edit documentation in R/plot_kde.R
 \name{plot_kde}
 \alias{plot_kde}
-\title{Plot Kernel Density Estimate as a heatmap}
+\title{Plot a 2D KDE surface as a heatmap with contour lines}
 \usage{
 plot_kde(
-  kde_long,
-  obs_data,
-  ta_col = "tavg",
-  pr_col = "prcp",
-  scenario_col = "scenario",
-  value_col = "weight",
-  xlim = NULL,
-  ylim = NULL,
-  bins = 20,
-  raster_interpolate = FALSE,
-  point_alpha = 0.8,
-  fill_option = "viridis",
-  fill_begin = 0,
-  fill_end = 1,
-  fill_alpha = 0.8,
-  fill_name = "Weight"
+  kde_grid,
+  samples,
+  x_col = "tavg",
+  y_col = "prcp",
+  facet_col = "scenario",
+  z_col = "weight",
+  x_limits = NULL,
+  y_limits = NULL,
+  n_contours = 20,
+  interpolate_raster = FALSE,
+  points_alpha = 0.8,
+  palette = "viridis",
+  palette_begin = 0,
+  palette_end = 1,
+  fill_opacity = 0.8,
+  fill_label = "Weight"
+)
+}
+\arguments{
+\item{kde_grid}{Data frame in long format containing gridded surface values.}
+
+\item{samples}{Data frame of sample points to overlay.}
+
+\item{x_col}{Character scalar; x-axis column name in both inputs (e.g., temperature).}
+
+\item{y_col}{Character scalar; y-axis column name in both inputs (e.g., precipitation).}
+
+\item{facet_col}{Character scalar; column in `kde_grid` used for faceting (e.g., scenario).}
+
+\item{z_col}{Character scalar; column in `kde_grid` used as the surface value (e.g., weight/density).}
+
+\item{x_limits}{Numeric length-2 or `NULL`; x-axis limits passed to `coord_cartesian()`.}
+
+\item{y_limits}{Numeric length-2 or `NULL`; y-axis limits passed to `coord_cartesian()`.}
+
+\item{n_contours}{Integer >= 1; number of contour bins for `geom_contour()`.}
+
+\item{interpolate_raster}{Logical; whether to interpolate raster pixels in `geom_raster()`.}
+
+\item{points_alpha}{Numeric in [0, 1]; alpha for sample point overlay.}
+
+\item{palette}{Character; viridis palette option passed to `scale_fill_viridis_c()`.}
+
+\item{palette_begin}{Numeric in [0, 1]; start of viridis palette.}
+
+\item{palette_end}{Numeric in [0, 1]; end of viridis palette.}
+
+\item{fill_opacity}{Numeric in [0, 1]; alpha for the fill scale.}
+
+\item{fill_label}{Character; legend title for the fill scale.}
+}
+\value{
+A `ggplot` object.
+
+#' @examples
+# Minimal reproducible example
+
+set.seed(1)
+
+# Sample points (e.g., ensemble projections)
+samples <- data.frame(
+  scenario = rep(c("SSP1", "SSP2"), each = 20),
+  tavg = c(rnorm(20, 0, 1), rnorm(20, 1, 1)),
+  prcp = c(rnorm(20, 0, 1), rnorm(20, 0.5, 1))
+)
+
+# Simple evaluation grid
+grid <- expand.grid(
+  tavg = seq(-3, 3, length.out = 40),
+  prcp = seq(-3, 3, length.out = 40),
+  scenario = c("SSP1", "SSP2")
+)
+
+# Fake KDE-like surface (for plotting only)
+grid$weight <- with(
+  grid,
+  exp(-0.5 * (tavg^2 + prcp^2))
+)
+
+# Plot
+plot_kde(
+  kde_grid = grid,
+  samples = samples,
+  x_col = "tavg",
+  y_col = "prcp",
+  facet_col = "scenario",
+  z_col = "weight",
+  n_contours = 10,
+  interpolate_raster = FALSE,
+  points_alpha = 0.6,
+  fill_label = "KDE weight"
 )
 }
 \description{
-Plot Kernel Density Estimate as a heatmap
+Plots a gridded 2D kernel density estimate (or any gridded surface) as a raster
+heatmap with contour lines, faceted by a grouping variable (e.g., scenario).
+Optionally overlays the original sample points.
+}
+\details{
+Expected data shape:
+- `kde_grid` is in long format: one row per grid point per facet.
+- `samples` contains point locations to overlay (typically the ensemble points
+  used to build the KDE).
+- `x_col` and `y_col` must exist in both `kde_grid` and `samples`.
+- `facet_col` and `z_col` must exist in `kde_grid`.
+
+Notes:
+- Contours are computed from `z_col` within each facet.
+- `fill_label` controls the legend title (via the fill scale).
+- `x_limits` / `y_limits` use `coord_cartesian()` (zoom without dropping data).
 }

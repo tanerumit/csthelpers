@@ -2,11 +2,11 @@
 % Please edit documentation in R/scenario_surface_weights_utils.R
 \name{.scenwgt_unique_colname}
 \alias{.scenwgt_unique_colname}
-\title{Generate unique column name, checking for duplicates}
+\title{Generate unique column name (no transformation)}
 \usage{
 .scenwgt_unique_colname(grp, existing_names)
 }
 \description{
-Generate unique column name, checking for duplicates
+Generate unique column name (no transformation)
 }
 \keyword{internal}

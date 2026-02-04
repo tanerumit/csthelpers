@@ -275,14 +275,28 @@
   sum(w)^2 / sum(w^2)
 }
 
-#' Generate unique column name, checking for duplicates
+#' Generate unique column name (no transformation)
 #' @keywords internal
 .scenwgt_unique_colname <- function(grp, existing_names) {
-  col_name <- make.names(grp)
-  if (col_name %in% existing_names) {
-    stop("Duplicate column name '", col_name, "' after make.names() transformation ",
-         "(from group '", grp, "'). Ensure group names produce unique column names.",
-         call. = FALSE)
+
+  if (length(grp) != 1L) {
+    stop("Group name must be length-1, got length ", length(grp), ".", call. = FALSE)
   }
+
+  col_name <- as.character(grp)
+
+  if (!nzchar(col_name)) {
+    stop("Group name must be a non-empty string.", call. = FALSE)
+  }
+
+  if (col_name %in% existing_names) {
+    stop(
+      "Duplicate group/column name '", col_name, "'. ",
+      "Group names must be unique and must not collide with existing output columns.",
+      call. = FALSE
+    )
+  }
+
   col_name
 }
+

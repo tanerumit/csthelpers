@@ -1,8 +1,21 @@
 # ------------------------------------------------------------------------------
-# KDE-specific helpers (REVISED)
+# KDE-specific helpers
 # ------------------------------------------------------------------------------
 
 #' Validate a 2D bandwidth vector
+#'
+#' @description
+#' Internal predicate to validate a 2D KDE bandwidth vector `c(bw_ta, bw_pr)`.
+#'
+#' @details
+#' A valid bandwidth vector is numeric, length 2, finite, and strictly positive.
+#' Bandwidth units must match the units of the (possibly scaled) temperature and
+#' precipitation inputs used by the KDE.
+#'
+#' @param bw_vec Numeric vector of length 2. Units: `[ta units, pr units]`.
+#'
+#' @return Logical scalar; `TRUE` if `bw_vec` is valid, otherwise `FALSE`.
+#'
 #' @keywords internal
 .scenwgt_validate_bw_vec <- function(bw_vec) {
   is.numeric(bw_vec) && length(bw_vec) == 2L &&
@@ -10,6 +23,23 @@
 }
 
 #' Try 2D plug-in bandwidth via ks::Hpi
+#'
+#' @description
+#' Attempts to estimate a 2D bandwidth matrix using a plug-in rule (via `ks::Hpi`)
+#' and converts it to a length-2 bandwidth vector using `sqrt(diag(H))`.
+#'
+#' @details
+#' - Input is treated as a bivariate sample `(ta, pr)` with observations in rows.
+#' - Returns `NULL` if the plug-in estimator fails (e.g., due to numerical issues,
+#'   degenerate covariance, or package-level errors).
+#' - The returned bandwidths correspond to marginal smoothing scales implied by
+#'   the diagonal of the 2D bandwidth matrix.
+#'
+#' @param ta Numeric vector of temperature values (finite). Units: `ta units`.
+#' @param pr Numeric vector of precipitation values (finite). Units: `pr units`.
+#'
+#' @return Numeric vector `c(bw_ta, bw_pr)` or `NULL` if estimation fails.
+#'
 #' @keywords internal
 .scenwgt_try_bw_plugin <- function(ta, pr) {
   data_mat <- cbind(ta, pr)
@@ -18,8 +48,22 @@
   sqrt(diag(H))
 }
 
-
-#' Try 1D NRD bandwidth
+#' Try 1D NRD bandwidth (diagonal 2D) for temperature and precipitation
+#'
+#' @description
+#' Estimates separate 1D NRD bandwidths for `ta` and `pr` and returns them as a
+#' diagonal 2D bandwidth vector `c(bw_ta, bw_pr)`.
+#'
+#' @details
+#' This is a pragmatic fallback when plug-in multivariate bandwidth estimation is
+#' unavailable or unstable. The underlying helper `.kde_try_nrd_2d()` is expected
+#' to return a 2x2 diagonal bandwidth matrix or `NULL`.
+#'
+#' @param ta Numeric vector of temperature values (finite). Units: `ta units`.
+#' @param pr Numeric vector of precipitation values (finite). Units: `pr units`.
+#'
+#' @return Numeric vector `c(bw_ta, bw_pr)` or `NULL` if estimation fails.
+#'
 #' @keywords internal
 .scenwgt_try_bw_nrd <- function(ta, pr) {
   data_mat <- cbind(ta, pr)
@@ -28,11 +72,44 @@
   sqrt(diag(H))
 }
 
-
-#' Auto bandwidth with optional plug-in method
+#' Select an automatic bandwidth with optional plug-in method and safety bounds
+#'
+#' @description
+#' Chooses a bandwidth vector for 2D Gaussian product-kernel KDE by combining
+#' (i) a grid-step-based floor and (ii) a data-driven estimate, then clamping to
+#' user-specified min/max bounds.
+#'
+#' @details
+#' The bandwidth is computed in three stages:
+#' 1. **Grid floor:** `bw_grid = c(k[1] * dT, k[2] * dP)` where `dT`/`dP` are the
+#'    grid steps (in the **current scale** used for evaluation).
+#' 2. **Data-driven:** either plug-in (`ks::Hpi`) or NRD (per-dimension), selected
+#'    by `bw_method`, with controlled fallback behavior when plug-in fails.
+#' 3. **Combine + clamp:** `bw_use = pmax(bw_grid, alpha * bw_data)` then clamped
+#'    elementwise to `[bw_min, bw_max]`.
+#'
+#' Returns `NULL` if a valid bandwidth cannot be produced after clamping/validation.
+#'
+#' Assumptions:
+#' - `ta` and `pr` are finite and have non-negligible variance.
+#' - `dT` and `dP` are non-negative and represent grid resolution in the same scale
+#'   as `ta`/`pr` passed to this function.
+#'
+#' @param ta Numeric vector (finite) of temperature values in the evaluation scale.
+#' @param pr Numeric vector (finite) of precipitation values in the evaluation scale.
+#' @param dT Numeric scalar; grid step in the temperature dimension (>= 0). Units: `ta units`.
+#' @param dP Numeric scalar; grid step in the precipitation dimension (>= 0). Units: `pr units`.
+#' @param k Numeric length-2; multipliers for grid-step floor. Dimensionless.
+#' @param alpha Numeric scalar > 0; multiplier applied to the data-driven bandwidth.
+#' @param bw_min Numeric length-2; elementwise lower bounds (>= 0).
+#' @param bw_max Numeric length-2; elementwise upper bounds (> 0 or `Inf`).
+#' @param bw_method Character; one of `"auto"`, `"plugin"`, `"nrd"`.
+#'
+#' @return Numeric length-2 bandwidth vector `c(bw_ta, bw_pr)` or `NULL`.
+#'
 #' @keywords internal
 .scenwgt_pick_bw_auto <- function(ta, pr, dT, dP, k, alpha, bw_min, bw_max,
-                                   bw_method = c("auto", "plugin", "nrd")) {
+                                  bw_method = c("auto", "plugin", "nrd")) {
   bw_method <- match.arg(bw_method)
 
   # Grid-step floor
@@ -75,19 +152,170 @@
 }
 
 #' Vectorized weighted KDE over a chunk of grid points (Gaussian product kernel)
+#'
+#' @description
+#' Computes weighted KDE values on a chunk of grid points using a separable
+#' Gaussian kernel: `K(u, v) = phi(u) * phi(v)` with `u = (g_ta - ta)/bw_ta`,
+#' `v = (g_pr - pr)/bw_pr`. This helper returns the unnormalized density sum
+#' (i.e., it does **not** apply the `1/(bw_ta*bw_pr)` normalization constant).
+#'
+#' @details
+#' Inputs must already be filtered to finite observations and consistent lengths.
+#' Weights `w_obs` are expected to be normalized to sum to 1 (upstream logic does
+#' this), but the computation itself works for any non-negative weights.
+#'
+#' Complexity:
+#' - Time: `O(n_grid_chunk * n_obs)`
+#' - Space: `O(n_grid_chunk * n_obs)` due to `outer()` allocations.
+#'
+#' @param g_ta Numeric vector of grid temperature coordinates for this chunk.
+#'   Units: `ta units` (evaluation scale).
+#' @param g_pr Numeric vector of grid precipitation coordinates for this chunk.
+#'   Units: `pr units` (evaluation scale).
+#' @param ta_use Numeric vector of observed temperatures (evaluation scale).
+#' @param pr_use Numeric vector of observed precipitation values (evaluation scale).
+#' @param w_obs Numeric vector of observation weights (same length as `ta_use`).
+#' @param inv_bw_ta Numeric scalar; `1 / bw_ta`. Units: `1 / ta units`.
+#' @param inv_bw_pr Numeric scalar; `1 / bw_pr`. Units: `1 / pr units`.
+#'
+#' @return Numeric vector of length `length(g_ta)` containing weighted kernel sums
+#'   (without the `1/(bw_ta*bw_pr)` factor).
+#'
 #' @keywords internal
 .scenwgt_kde_chunk_vectorized <- function(g_ta, g_pr, ta_use, pr_use,
-                                           w_obs, inv_bw_ta, inv_bw_pr) {
+                                          w_obs, inv_bw_ta, inv_bw_pr) {
   u_mat <- outer(g_ta, ta_use, `-`) * inv_bw_ta
   v_mat <- outer(g_pr, pr_use, `-`) * inv_bw_pr
   kernel_vals <- stats::dnorm(u_mat) * stats::dnorm(v_mat)
   as.numeric(kernel_vals %*% w_obs)
 }
 
+# ==============================================================================
+# Main KDE function
+# ==============================================================================
 
-# ------------------------------------------------------------------------------
-
-
+#' Calculate climate-informed scenario weights using 2D KDE
+#'
+#' @description
+#' For each group (e.g., SSP), fits a 2D Gaussian product-kernel KDE to ensemble
+#' points `(ta, pr)` and evaluates it on `scenario_grid`. If `normalize = TRUE`,
+#' returns a discrete probability mass function (PMF) over grid points (optionally
+#' scaled by grid-cell area for regular grids).
+#'
+#' @details
+#' **What is computed**
+#' - Let observations be `(ta_i, pr_i)` with weights `w_i` (either uniform or taken
+#'   from `weights_col`, then renormalized to sum to 1 after filtering).
+#' - For each grid point `(T, P)`, compute
+#'   \deqn{ \hat{f}(T, P) = \frac{1}{bw_{ta}\,bw_{pr}} \sum_i w_i \, \phi\!\left(\frac{T-ta_i}{bw_{ta}}\right)\,
+#'   \phi\!\left(\frac{P-pr_i}{bw_{pr}}\right) }
+#'   where `phi()` is the standard normal density.
+#'
+#' **Scaling**
+#' - `scale = "none"` evaluates in the original units.
+#' - `scale = "global"` applies one global scaling (derived in grid context).
+#' - `scale = "by_group"` applies scaling per group.
+#' Scaling affects bandwidth selection and evaluation because it changes units.
+#'
+#' **Area weighting (only when `normalize = TRUE`)**
+#' - If `area_weight = "regular"`, weights are multiplied by `(dT * dP)` prior to
+#'   normalization, where `dT` and `dP` are grid steps in the evaluation scale.
+#' - If `area_weight = "none"`, normalization is over raw evaluated densities.
+#'
+#' **Support masking**
+#' - If `support` is provided, grid points outside support are set to zero after
+#'   evaluation. If all grid points are outside support, a warning is emitted and
+#'   the returned weight column for that group will be all zeros (after masking).
+#'
+#' **Diagnostics**
+#' When `diagnostics = TRUE`, attributes are attached:
+#' - `"bandwidth_used"`: per-group bandwidths used.
+#' - `"bandwidth_method"`: `"user"` or the selected automatic method.
+#' - `"effective_sample_size"`: Kish effective sample size computed from raw weights.
+#' - `"scaling_params"`: scaling mode and per-group scaling factors.
+#'
+#' **Failure / skip conditions**
+#' Groups are skipped (with a warning) when:
+#' - fewer than `min_samples` complete `(ta, pr)` pairs remain,
+#' - near-zero variance in `ta` or `pr`,
+#' - automatic bandwidth selection fails.
+#' Skipped groups are recorded in `attr(out, "skipped_groups")`.
+#'
+#' @param ensemble_data Data frame with ensemble projections. Must contain columns
+#'   `ta_col`, `pr_col`, and `group_col`. Rows with non-finite `ta` or `pr` are ignored.
+#' @param scenario_grid Data frame defining the evaluation grid. Must contain columns
+#'   `ta_col` and `pr_col`. All rows are evaluated.
+#' @param pr_col Character scalar; name of precipitation column in both inputs. Units: `pr units`.
+#' @param ta_col Character scalar; name of temperature column in both inputs. Units: `ta units`.
+#' @param group_col Character scalar; name of grouping column in `ensemble_data`
+#'   (e.g., scenario/SSP). One output weight column is produced per group.
+#' @param bw Optional numeric length-2 bandwidth vector `c(bw_ta, bw_pr)` in the
+#'   **original units**. If `scale != "none"`, the bandwidth is internally scaled
+#'   to the evaluation scale. Must be strictly positive.
+#' @param bw_method Bandwidth selection method used when `bw` is `NULL`.
+#'   One of `"auto"`, `"plugin"`, `"nrd"`. See Details.
+#' @param k Numeric length-2; grid-step multipliers used for bandwidth floor.
+#'   Dimensionless. Larger values enforce smoother KDE relative to grid resolution.
+#' @param alpha Numeric scalar > 0; multiplier applied to the data-driven bandwidth
+#'   estimate before combining with the grid floor.
+#' @param bw_min Numeric length-2; elementwise lower bounds for bandwidth (>= 0) in
+#'   the **original units**, later scaled if applicable.
+#' @param bw_max Numeric length-2; elementwise upper bounds for bandwidth (> 0 or `Inf`)
+#'   in the **original units**, later scaled if applicable.
+#' @param min_samples Integer; minimum number of complete observations required per
+#'   group after filtering. Must be >= 3.
+#' @param normalize Logical; if `TRUE`, normalize each group’s weights to sum to 1
+#'   (after optional area-weighting and support masking). If `FALSE`, returns raw
+#'   evaluated densities (scaled by `1/(bw_ta*bw_pr)`).
+#' @param area_weight Character; `"regular"` or `"none"`. Only applied when
+#'   `normalize = TRUE`. See Details.
+#' @param scale Character; `"none"`, `"global"`, or `"by_group"`. Controls scaling
+#'   applied to the `(ta, pr)` space and grid before KDE evaluation.
+#' @param weights_col Optional character scalar naming a column in `ensemble_data`
+#'   containing per-row weights. Weights are validated and renormalized within each
+#'   group after filtering to complete cases.
+#' @param support Optional list specifying support bounds. Expected keys are `ta`
+#'   and/or `pr`, each a numeric length-2 range `c(min, max)` in the **original units**.
+#'   Grid points outside support are set to zero.
+#' @param chunk_size Integer; number of grid rows evaluated per chunk. Larger values
+#'   are faster but use more memory due to `outer()` allocations.
+#' @param diagnostics Logical; if `TRUE`, attaches diagnostic attributes (see Details).
+#' @param verbose Logical; if `TRUE`, prints per-group bandwidth info and emits
+#'   additional warnings (e.g., low effective sample size).
+#'
+#' @return A data frame with the original `scenario_grid` columns plus one numeric
+#'   weight column per group. Weight columns are named using the group labels,
+#'   with collision avoidance if necessary.
+#'
+#' @examples
+#' set.seed(1)
+#' ensemble_data <- data.frame(
+#'   scenario = rep(c("SSP1", "SSP2"), each = 30),
+#'   tavg = c(rnorm(30, 0, 1), rnorm(30, 1, 1)),
+#'   prcp = c(rnorm(30, 0, 1), rnorm(30, 0.5, 1))
+#' )
+#'
+#' scenario_grid <- expand.grid(
+#'   tavg = seq(-3, 3, length.out = 50),
+#'   prcp = seq(-3, 3, length.out = 50)
+#' )
+#'
+#' w <- compute_scenario_surface_weights_kde(
+#'   ensemble_data = ensemble_data,
+#'   scenario_grid = scenario_grid,
+#'   ta_col = "tavg",
+#'   pr_col = "prcp",
+#'   group_col = "scenario",
+#'   normalize = TRUE,
+#'   area_weight = "none",
+#'   verbose = FALSE
+#' )
+#' head(w)
+#'
+#' @importFrom MASS bandwidth.nrd
+#' @importFrom dplyr filter
+#' @importFrom rlang .data
+#' @export
 compute_scenario_surface_weights_kde <- function(
     ensemble_data,
     scenario_grid,
@@ -369,36 +597,3 @@ compute_scenario_surface_weights_kde <- function(
   out
 }
 
-
-# ==============================================================================
-# Main MVN function (REVISED)
-# ==============================================================================
-
-#' Calculate Climate-Informed Scenario Weights (MVN; external per-row weights)
-#'
-#' @description
-#' For each group, fits a bivariate normal distribution to (ta, pr) and evaluates
-#' its density on `scenario_grid`. If `normalize=TRUE`, returns a discrete PMF over
-#' grid points (optionally area-weighted for regular grids).
-#'
-#' @param ensemble_data Data frame containing ensemble projections.
-#' @param scenario_grid Data frame defining the evaluation grid.
-#' @param pr_col Column name for precipitation variable.
-#' @param ta_col Column name for temperature variable.
-#' @param group_col Column name for grouping (e.g., scenario).
-#' @param robust Logical; use robust covariance estimation?
-#' @param min_samples Minimum observations required per group.
-#' @param normalize Logical; normalize to PMF?
-#' @param area_weight Area weighting method: "regular" or "none".
-#' @param scale Scaling method: "none", "global", or "by_group".
-#' @param weights_col Optional column with per-row weights (incompatible with robust=TRUE).
-#' @param support Optional list with ta and/or pr bounds.
-#' @param diagnostics Logical; attach diagnostic attributes?
-#' @param verbose Logical; print progress messages?
-#'
-#' @return Data frame with scenario_grid columns plus one weight column per group.
-#'
-#' @importFrom MASS cov.trob
-#' @importFrom dplyr filter
-#' @importFrom rlang .data
-#' @export

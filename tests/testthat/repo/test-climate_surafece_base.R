@@ -1,4 +1,4 @@
-# tests/testthat/test-climate_surface_base.R
+# Functions: climate_surface_base (R/plot_climate_surface.R)
 
 testthat::test_that("climate_surface_base() returns expected structure and ggplot", {
   skip_if_not_installed("ggplot2")
@@ -14,7 +14,7 @@ testthat::test_that("climate_surface_base() returns expected structure and ggplo
   # ensure baseline exists
   testthat::expect_true(any(df$prcp == 0 & df$tavg == 0))
 
-  out <- climate_surface_base(
+  p <- climate_surface_base(
     data = df,
     x_var = "prcp",
     y_var = "tavg",
@@ -22,21 +22,16 @@ testthat::test_that("climate_surface_base() returns expected structure and ggplo
     title = "Test Surface"
   )
 
-  testthat::expect_type(out, "list")
-  testthat::expect_named(out, c("p", "width", "height"))
-  testthat::expect_s3_class(out$p, "ggplot")
-  testthat::expect_true(is.numeric(out$width) && length(out$width) == 1)
-  testthat::expect_true(is.numeric(out$height) && length(out$height) == 1)
+  testthat::expect_s3_class(p, "ggplot")
 
   # Metadata attached
-  testthat::expect_true(is.numeric(attr(out$p, "threshold")))
-  testthat::expect_identical(attr(out$p, "x_var"), "prcp")
-  testthat::expect_identical(attr(out$p, "y_var"), "tavg")
-  testthat::expect_identical(attr(out$p, "z_var"), "impact")
-  testthat::expect_true(is.numeric(attr(out$p, "x_breaks")))
-  testthat::expect_true(is.numeric(attr(out$p, "y_breaks")))
-  testthat::expect_true(is.numeric(attr(out$p, "z_limits")))
-  testthat::expect_true(is.numeric(attr(out$p, "contour_breaks")))
+  testthat::expect_true(is.numeric(attr(p, "threshold")))
+  testthat::expect_identical(attr(p, "x_var"), "prcp")
+  testthat::expect_identical(attr(p, "y_var"), "tavg")
+  testthat::expect_true(is.numeric(attr(p, "x_breaks")))
+  testthat::expect_true(is.numeric(attr(p, "y_breaks")))
+  testthat::expect_true(is.numeric(attr(p, "z_range")))
+  testthat::expect_true(is.numeric(attr(p, "contour_breaks")))
 })
 
 testthat::test_that("required arguments and column existence are validated", {
@@ -125,26 +120,26 @@ testthat::test_that("z_limits must be length-2, finite, and increasing; clipping
     "z_limits"
   )
 
-  out <- climate_surface_base(
+  p <- climate_surface_base(
     df, "prcp", "tavg", "impact",
     z_limits = c(90, 110),
     threshold = 100
   )
 
   # Metadata reports the legend/surface range
-  testthat::expect_identical(attr(out$p, "z_limits"), c(90, 110))
+  testthat::expect_identical(attr(p, "z_range"), c(90, 110))
 
   # The ggplot stores the (possibly clipped) data in p$data
-  testthat::expect_true(all(out$p$data$impact >= 90 - 1e-12))
-  testthat::expect_true(all(out$p$data$impact <= 110 + 1e-12))
+  testthat::expect_true(all(p$data$impact >= 90 - 1e-12))
+  testthat::expect_true(all(p$data$impact <= 110 + 1e-12))
 })
 
 testthat::test_that("threshold inference works when baseline exists, errors when it doesn't", {
   df <- expand.grid(prcp = c(-10, 0, 10), tavg = c(-1, 0, 1))
   df$impact <- 5 + df$prcp * 0 + df$tavg * 0
   # baseline exists and has impact 5
-  out <- climate_surface_base(df, "prcp", "tavg", "impact")
-  testthat::expect_equal(attr(out$p, "threshold"), 5)
+  p <- climate_surface_base(df, "prcp", "tavg", "impact")
+  testthat::expect_equal(attr(p, "threshold"), 5)
 
   # remove baseline -> should error unless threshold provided
   df2 <- subset(df, !(prcp == 0 & tavg == 0))
@@ -153,8 +148,8 @@ testthat::test_that("threshold inference works when baseline exists, errors when
     "Cannot infer threshold"
   )
 
-  out2 <- climate_surface_base(df2, "prcp", "tavg", "impact", threshold = 5)
-  testthat::expect_equal(attr(out2$p, "threshold"), 5)
+  p2 <- climate_surface_base(df2, "prcp", "tavg", "impact", threshold = 5)
+  testthat::expect_equal(attr(p2, "threshold"), 5)
 })
 
 testthat::test_that("z must have finite values and non-zero range", {
@@ -201,14 +196,14 @@ testthat::test_that("contour_breaks are within z_limits (or data range) and prod
   df <- expand.grid(prcp = seq(-20, 20, 10), tavg = seq(-2, 2, 1))
   df$impact <- 100 + 2 * df$tavg - 0.5 * df$prcp
 
-  out <- climate_surface_base(
+  p <- climate_surface_base(
     df, "prcp", "tavg", "impact",
     threshold = 100,
     n_contours = 17,
     z_limits = c(90, 110)
   )
 
-  br <- attr(out$p, "contour_breaks")
+  br <- attr(p, "contour_breaks")
   testthat::expect_true(is.numeric(br))
   testthat::expect_true(all(is.finite(br)))
   testthat::expect_true(isTRUE(all(diff(br) > 0)))
@@ -230,17 +225,17 @@ testthat::test_that("x_breaks / y_breaks defaults are sorted unique of data, and
     impact = c(1, 2, 3, 4)
   )
 
-  out <- climate_surface_base(df, "prcp", "tavg", "impact", threshold = 2.5)
+  p <- climate_surface_base(df, "prcp", "tavg", "impact", threshold = 2.5)
 
-  xb <- attr(out$p, "x_breaks")
-  yb <- attr(out$p, "y_breaks")
+  xb <- attr(p, "x_breaks")
+  yb <- attr(p, "y_breaks")
   testthat::expect_identical(xb, sort(unique(df$prcp)))
   testthat::expect_identical(yb, sort(unique(df$tavg)))
 
   # Axis limits were set to range(x_breaks)/range(y_breaks) inside scales;
   # ggplot stores them in the scale objects. We only sanity-check that scales exist.
-  sc_x <- out$p$scales$get_scales("x")
-  sc_y <- out$p$scales$get_scales("y")
+  sc_x <- p$scales$get_scales("x")
+  sc_y <- p$scales$get_scales("y")
   testthat::expect_true(!is.null(sc_x))
   testthat::expect_true(!is.null(sc_y))
 })

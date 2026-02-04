@@ -23,6 +23,9 @@ compute_scenario_surface_weights_copula(
   weights_col = NULL,
   support = NULL,
   chunk_size = 5000L,
+  gof_diagnostics = TRUE,
+  gof_n_grid = 10L,
+  gof_warn_threshold = 0.05,
   diagnostics = FALSE,
   verbose = TRUE
 )

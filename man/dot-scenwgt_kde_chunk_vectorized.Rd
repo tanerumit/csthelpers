@@ -14,7 +14,40 @@
   inv_bw_pr
 )
 }
+\arguments{
+\item{g_ta}{Numeric vector of grid temperature coordinates for this chunk.
+Units: `ta units` (evaluation scale).}
+
+\item{g_pr}{Numeric vector of grid precipitation coordinates for this chunk.
+Units: `pr units` (evaluation scale).}
+
+\item{ta_use}{Numeric vector of observed temperatures (evaluation scale).}
+
+\item{pr_use}{Numeric vector of observed precipitation values (evaluation scale).}
+
+\item{w_obs}{Numeric vector of observation weights (same length as `ta_use`).}
+
+\item{inv_bw_ta}{Numeric scalar; `1 / bw_ta`. Units: `1 / ta units`.}
+
+\item{inv_bw_pr}{Numeric scalar; `1 / bw_pr`. Units: `1 / pr units`.}
+}
+\value{
+Numeric vector of length `length(g_ta)` containing weighted kernel sums
+  (without the `1/(bw_ta*bw_pr)` factor).
+}
 \description{
-Vectorized weighted KDE over a chunk of grid points (Gaussian product kernel)
+Computes weighted KDE values on a chunk of grid points using a separable
+Gaussian kernel: `K(u, v) = phi(u) * phi(v)` with `u = (g_ta - ta)/bw_ta`,
+`v = (g_pr - pr)/bw_pr`. This helper returns the unnormalized density sum
+(i.e., it does **not** apply the `1/(bw_ta*bw_pr)` normalization constant).
+}
+\details{
+Inputs must already be filtered to finite observations and consistent lengths.
+Weights `w_obs` are expected to be normalized to sum to 1 (upstream logic does
+this), but the computation itself works for any non-negative weights.
+
+Complexity:
+- Time: `O(n_grid_chunk * n_obs)`
+- Space: `O(n_grid_chunk * n_obs)` due to `outer()` allocations.
 }
 \keyword{internal}

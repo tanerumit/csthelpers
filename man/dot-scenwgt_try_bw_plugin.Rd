@@ -6,7 +6,23 @@
 \usage{
 .scenwgt_try_bw_plugin(ta, pr)
 }
+\arguments{
+\item{ta}{Numeric vector of temperature values (finite). Units: `ta units`.}
+
+\item{pr}{Numeric vector of precipitation values (finite). Units: `pr units`.}
+}
+\value{
+Numeric vector `c(bw_ta, bw_pr)` or `NULL` if estimation fails.
+}
 \description{
-Try 2D plug-in bandwidth via ks::Hpi
+Attempts to estimate a 2D bandwidth matrix using a plug-in rule (via `ks::Hpi`)
+and converts it to a length-2 bandwidth vector using `sqrt(diag(H))`.
+}
+\details{
+- Input is treated as a bivariate sample `(ta, pr)` with observations in rows.
+- Returns `NULL` if the plug-in estimator fails (e.g., due to numerical issues,
+  degenerate covariance, or package-level errors).
+- The returned bandwidths correspond to marginal smoothing scales implied by
+  the diagonal of the 2D bandwidth matrix.
 }
 \keyword{internal}

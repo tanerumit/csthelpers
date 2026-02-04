@@ -72,45 +72,37 @@
 
 
 # ==============================================================================
-# Main KDE function (REVISED)
+# Main MVN function (REVISED)
 # ==============================================================================
 
-#' Calculate Climate-Informed Scenario Weights (KDE; external per-row weights)
+#' Calculate Climate-Informed Scenario Weights (MVN; external per-row weights)
 #'
 #' @description
-#' For each group (e.g., SSP), fits a 2D Gaussian product-kernel KDE to ensemble
-#' (ta, pr) points and evaluates it on `scenario_grid`. If `normalize=TRUE`, returns
-#' a discrete PMF over grid points (optionally area-weighted for regular grids).
+#' For each group, fits a bivariate normal distribution to (ta, pr) and evaluates
+#' its density on `scenario_grid`. If `normalize=TRUE`, returns a discrete PMF over
+#' grid points (optionally area-weighted for regular grids).
 #'
 #' @param ensemble_data Data frame containing ensemble projections.
 #' @param scenario_grid Data frame defining the evaluation grid.
 #' @param pr_col Column name for precipitation variable.
 #' @param ta_col Column name for temperature variable.
 #' @param group_col Column name for grouping (e.g., scenario).
-#' @param bw Optional user-specified bandwidth vector c(bw_ta, bw_pr).
-#' @param bw_method Bandwidth selection method: "auto", "plugin", or "nrd".
-#' @param k Grid-step multipliers for bandwidth floor.
-#' @param alpha Multiplier for data-driven bandwidth.
-#' @param bw_min Minimum bandwidth bounds.
-#' @param bw_max Maximum bandwidth bounds.
+#' @param robust Logical; use robust covariance estimation?
 #' @param min_samples Minimum observations required per group.
 #' @param normalize Logical; normalize to PMF?
 #' @param area_weight Area weighting method: "regular" or "none".
 #' @param scale Scaling method: "none", "global", or "by_group".
-#' @param weights_col Optional column with per-row weights.
+#' @param weights_col Optional column with per-row weights (incompatible with robust=TRUE).
 #' @param support Optional list with ta and/or pr bounds.
-#' @param chunk_size Grid evaluation chunk size.
 #' @param diagnostics Logical; attach diagnostic attributes?
 #' @param verbose Logical; print progress messages?
 #'
 #' @return Data frame with scenario_grid columns plus one weight column per group.
 #'
-#' @importFrom MASS bandwidth.nrd
+#' @importFrom MASS cov.trob
 #' @importFrom dplyr filter
 #' @importFrom rlang .data
 #' @export
-
-
 compute_scenario_surface_weights_mvnorm <- function(
     ensemble_data,
     scenario_grid,
