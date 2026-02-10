@@ -2,17 +2,19 @@ Package: csthelpers
 Type: Package
 Title: What the Package Does (Title Case)
 Version: 0.1.0
-Authors@R: c(
-    person(
-      "Jane", "Doe",
-      email = "jane@example.com",
-      role = c("aut", "cre")
-    )
-  )
-Description: More about what it does (maybe more than one line).
-    Continuation lines should be indented.
-License: What license is it under?
+Author: Umit Taner
+Description: Functions to support and extend climate stress testing
+Depends:
+  R (>= 4.5)
+Imports:
+  MASS,
+  dplyr,
+  ggplot2,
+  rlang,
+  ggspatial
+License: MIT + file LICENSE
 Encoding: UTF-8
+Language: en-US
 LazyData: true
 RoxygenNote: 7.3.3
 Suggests: 

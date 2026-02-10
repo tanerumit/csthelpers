@@ -58,8 +58,26 @@ plot_kde(
 }
 \value{
 A `ggplot` object.
+}
+\description{
+Plots a gridded 2D kernel density estimate (or any gridded surface) as a raster
+heatmap with contour lines, faceted by a grouping variable (e.g., scenario).
+Optionally overlays the original sample points.
+}
+\details{
+Expected data shape:
+- `kde_grid` is in long format: one row per grid point per facet.
+- `samples` contains point locations to overlay (typically the ensemble points
+  used to build the KDE).
+- `x_col` and `y_col` must exist in both `kde_grid` and `samples`.
+- `facet_col` and `z_col` must exist in `kde_grid`.
 
-#' @examples
+Notes:
+- Contours are computed from `z_col` within each facet.
+- `fill_label` controls the legend title (via the fill scale).
+- `x_limits` / `y_limits` use `coord_cartesian()` (zoom without dropping data).
+}
+\examples{
 # Minimal reproducible example
 
 set.seed(1)
@@ -97,22 +115,4 @@ plot_kde(
   points_alpha = 0.6,
   fill_label = "KDE weight"
 )
-}
-\description{
-Plots a gridded 2D kernel density estimate (or any gridded surface) as a raster
-heatmap with contour lines, faceted by a grouping variable (e.g., scenario).
-Optionally overlays the original sample points.
-}
-\details{
-Expected data shape:
-- `kde_grid` is in long format: one row per grid point per facet.
-- `samples` contains point locations to overlay (typically the ensemble points
-  used to build the KDE).
-- `x_col` and `y_col` must exist in both `kde_grid` and `samples`.
-- `facet_col` and `z_col` must exist in `kde_grid`.
-
-Notes:
-- Contours are computed from `z_col` within each facet.
-- `fill_label` controls the legend title (via the fill scale).
-- `x_limits` / `y_limits` use `coord_cartesian()` (zoom without dropping data).
 }

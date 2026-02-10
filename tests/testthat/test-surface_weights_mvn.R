@@ -1,3 +1,4 @@
+# Functions: compute_scenario_surface_weights_mvn (R/scenario_surface_weights_mvn.R)
 
 test_that("mvnorm: basic output structure and normalization", {
   set.seed(1)
@@ -13,7 +14,7 @@ test_that("mvnorm: basic output structure and normalization", {
     prcp = seq(5, 18, by = 0.5)
   )
 
-  out <- compute_scenario_surface_weights_mvnorm(
+  out <- compute_scenario_surface_weights_mvn(
     ensemble_data = ensemble_data,
     scenario_grid = scenario_grid,
     ta_col = "tavg",
@@ -28,14 +29,14 @@ test_that("mvnorm: basic output structure and normalization", {
   )
 
   expect_s3_class(out, "data.frame")
-  expect_true(all(c("tavg", "prcp") %in% names(out)))
-  expect_true(all(c("SSP1", "SSP2") %in% names(out)))
+  expect_true(all(c("tavg", "prcp", "scenario", "weight") %in% names(out)))
 
-  expect_equal(sum(out$SSP1), 1, tolerance = 1e-10)
-  expect_equal(sum(out$SSP2), 1, tolerance = 1e-10)
+  sums <- tapply(out$weight, out$scenario, sum)
+  expect_true(all(c("SSP1", "SSP2") %in% names(sums)))
+  expect_equal(sums[["SSP1"]], 1, tolerance = 1e-10)
+  expect_equal(sums[["SSP2"]], 1, tolerance = 1e-10)
 
-  expect_true(all(out$SSP1 >= 0 | is.na(out$SSP1)))
-  expect_true(all(out$SSP2 >= 0 | is.na(out$SSP2)))
+  expect_true(all(out$weight >= 0 | is.na(out$weight)))
 })
 
 test_that("mvnorm: diagnostics attributes exist and are consistent", {
@@ -52,7 +53,7 @@ test_that("mvnorm: diagnostics attributes exist and are consistent", {
     prcp = seq(6, 17, by = 0.5)
   )
 
-  out <- compute_scenario_surface_weights_mvnorm(
+  out <- compute_scenario_surface_weights_mvn(
     ensemble_data = ensemble_data,
     scenario_grid = scenario_grid,
     robust = TRUE,
@@ -93,7 +94,7 @@ test_that("mvnorm: support masking zeros weights outside bounds", {
 
   support <- list(ta = c(0, 3), pr = c(8, 14))
 
-  out <- compute_scenario_surface_weights_mvnorm(
+  out <- compute_scenario_surface_weights_mvn(
     ensemble_data = ensemble_data,
     scenario_grid = scenario_grid,
     support = support,
@@ -104,11 +105,12 @@ test_that("mvnorm: support masking zeros weights outside bounds", {
     verbose = FALSE
   )
 
-  inside <- scenario_grid$tavg >= 0 & scenario_grid$tavg <= 3 &
-    scenario_grid$prcp >= 8 & scenario_grid$prcp <= 14
+  inside <- out$tavg >= 0 & out$tavg <= 3 &
+    out$prcp >= 8 & out$prcp <= 14 &
+    out$scenario == "SSP1"
 
-  expect_true(all(out$SSP1[!inside] == 0))
-  expect_true(any(out$SSP1[inside] > 0))
+  expect_true(all(out$weight[!inside & out$scenario == "SSP1"] == 0))
+  expect_true(any(out$weight[inside] > 0))
 })
 
 test_that("mvnorm: robust=TRUE rejects weights_col", {
@@ -127,7 +129,7 @@ test_that("mvnorm: robust=TRUE rejects weights_col", {
   )
 
   expect_error(
-    compute_scenario_surface_weights_mvnorm(
+    compute_scenario_surface_weights_mvn(
       ensemble_data = ensemble_data,
       scenario_grid = scenario_grid,
       weights_col = "w",
@@ -161,7 +163,7 @@ test_that("mvnorm: weights_col changes the output when robust=FALSE", {
     prcp = seq(5, 18, by = 0.5)
   )
 
-  out_unw <- compute_scenario_surface_weights_mvnorm(
+  out_unw <- compute_scenario_surface_weights_mvn(
     ensemble_data = subset(ensemble_data, select = -w),
     scenario_grid = scenario_grid,
     robust = FALSE,
@@ -172,7 +174,7 @@ test_that("mvnorm: weights_col changes the output when robust=FALSE", {
     verbose = FALSE
   )
 
-  out_w <- compute_scenario_surface_weights_mvnorm(
+  out_w <- compute_scenario_surface_weights_mvn(
     ensemble_data = ensemble_data,
     scenario_grid = scenario_grid,
     weights_col = "w",
@@ -185,11 +187,11 @@ test_that("mvnorm: weights_col changes the output when robust=FALSE", {
   )
 
   # Outputs should differ measurably
-  expect_gt(sum(abs(out_unw$SSP1 - out_w$SSP1)), 0.1)
+  expect_gt(sum(abs(out_unw$weight - out_w$weight)), 0.1)
 
   # Both should normalize
-  expect_equal(sum(out_unw$SSP1), 1, tolerance = 1e-10)
-  expect_equal(sum(out_w$SSP1), 1, tolerance = 1e-10)
+  expect_equal(sum(out_unw$weight), 1, tolerance = 1e-10)
+  expect_equal(sum(out_w$weight), 1, tolerance = 1e-10)
 })
 
 test_that("mvnorm: groups are skipped when insufficient samples or near-zero variance", {
@@ -207,7 +209,7 @@ test_that("mvnorm: groups are skipped when insufficient samples or near-zero var
   )
 
   out <- suppressWarnings(
-    compute_scenario_surface_weights_mvnorm(
+    compute_scenario_surface_weights_mvn(
       ensemble_data = ensemble_data,
       scenario_grid = scenario_grid,
       min_samples = 5L,
@@ -225,9 +227,9 @@ test_that("mvnorm: groups are skipped when insufficient samples or near-zero var
   expect_true("TOOSMALL" %in% skipped)
   expect_false("OK" %in% skipped)
 
-  expect_true("OK" %in% names(out))
-  expect_false("ZEROVAR" %in% names(out))
-  expect_false("TOOSMALL" %in% names(out))
+  expect_true("OK" %in% out$scenario)
+  expect_false("ZEROVAR" %in% out$scenario)
+  expect_false("TOOSMALL" %in% out$scenario)
 })
 
 test_that("mvnorm: input validation errors for missing columns and empty grid", {
@@ -235,7 +237,7 @@ test_that("mvnorm: input validation errors for missing columns and empty grid", 
   scenario_grid <- data.frame(tavg = numeric(0), prcp = numeric(0))
 
   expect_error(
-    compute_scenario_surface_weights_mvnorm(
+    compute_scenario_surface_weights_mvn(
       ensemble_data = ensemble_data,
       scenario_grid = scenario_grid,
       verbose = FALSE
@@ -244,7 +246,7 @@ test_that("mvnorm: input validation errors for missing columns and empty grid", 
   )
 
   expect_error(
-    compute_scenario_surface_weights_mvnorm(
+    compute_scenario_surface_weights_mvn(
       ensemble_data = data.frame(tavg = 1:5, scenario = "SSP1"),
       scenario_grid = data.frame(tavg = 1, prcp = 1),
       verbose = FALSE

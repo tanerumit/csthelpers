@@ -1,3 +1,5 @@
+# Functions: compute_scenario_surface_weights_kde (R/scenario_surface_weights_kde.R)
+
 test_that("kde: basic output structure and normalization", {
   set.seed(11)
 
@@ -27,14 +29,14 @@ test_that("kde: basic output structure and normalization", {
   )
 
   expect_s3_class(out, "data.frame")
-  expect_true(all(c("tavg", "prcp") %in% names(out)))
-  expect_true(all(c("SSP1", "SSP2") %in% names(out)))
+  expect_true(all(c("tavg", "prcp", "scenario", "weight") %in% names(out)))
 
-  expect_equal(sum(out$SSP1), 1, tolerance = 1e-10)
-  expect_equal(sum(out$SSP2), 1, tolerance = 1e-10)
+  sums <- tapply(out$weight, out$scenario, sum)
+  expect_true(all(c("SSP1", "SSP2") %in% names(sums)))
+  expect_equal(sums[["SSP1"]], 1, tolerance = 1e-10)
+  expect_equal(sums[["SSP2"]], 1, tolerance = 1e-10)
 
-  expect_true(all(out$SSP1 >= 0 | is.na(out$SSP1)))
-  expect_true(all(out$SSP2 >= 0 | is.na(out$SSP2)))
+  expect_true(all(out$weight >= 0 | is.na(out$weight)))
 })
 
 test_that("kde: diagnostics attributes exist and are consistent", {
@@ -100,11 +102,12 @@ test_that("kde: support masking zeros weights outside bounds", {
     verbose = FALSE
   )
 
-  inside <- scenario_grid$tavg >= 0 & scenario_grid$tavg <= 3 &
-            scenario_grid$prcp >= 8 & scenario_grid$prcp <= 14
+  inside <- out$tavg >= 0 & out$tavg <= 3 &
+    out$prcp >= 8 & out$prcp <= 14 &
+    out$scenario == "SSP1"
 
-  expect_true(all(out$SSP1[!inside] == 0))
-  expect_true(any(out$SSP1[inside] > 0))
+  expect_true(all(out$weight[!inside & out$scenario == "SSP1"] == 0))
+  expect_true(any(out$weight[inside] > 0))
 })
 
 test_that("kde: weights_col changes the output relative to unweighted", {
@@ -151,9 +154,9 @@ test_that("kde: weights_col changes the output relative to unweighted", {
     verbose = FALSE
   )
 
-  expect_gt(sum(abs(out_unw$SSP1 - out_w$SSP1)), 0.1)
-  expect_equal(sum(out_unw$SSP1), 1, tolerance = 1e-10)
-  expect_equal(sum(out_w$SSP1), 1, tolerance = 1e-10)
+  expect_gt(sum(abs(out_unw$weight - out_w$weight)), 0.1)
+  expect_equal(sum(out_unw$weight), 1, tolerance = 1e-10)
+  expect_equal(sum(out_w$weight), 1, tolerance = 1e-10)
 })
 
 test_that("kde: groups are skipped when insufficient samples or near-zero variance", {
@@ -188,9 +191,9 @@ test_that("kde: groups are skipped when insufficient samples or near-zero varian
   expect_true("TOOSMALL" %in% skipped)
   expect_false("OK" %in% skipped)
 
-  expect_true("OK" %in% names(out))
-  expect_false("ZEROVAR" %in% names(out))
-  expect_false("TOOSMALL" %in% names(out))
+  expect_true("OK" %in% out$scenario)
+  expect_false("ZEROVAR" %in% out$scenario)
+  expect_false("TOOSMALL" %in% out$scenario)
 })
 
 test_that("kde: input validation errors for missing columns and empty surface", {

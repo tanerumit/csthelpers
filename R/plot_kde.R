@@ -37,7 +37,7 @@
 #'
 #' @return A `ggplot` object.
 #'
-#'#' @examples
+#' @examples
 #' # Minimal reproducible example
 #'
 #' set.seed(1)
@@ -166,7 +166,7 @@ plot_kde <- function(
       y = .data[[y_col]]
     )
   ) +
-    theme_light() +
+    theme_bw() +
     geom_raster(
       aes(fill = .data[[z_col]]),
       interpolate = interpolate_raster

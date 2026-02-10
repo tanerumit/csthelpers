@@ -12,13 +12,9 @@ library(ggplot2)   # plotting
 library(viridis)   # color scales (used inside plot helpers typically)
 library(csthelpers) # scenario surface weight methods + plotting/eval helpers
 
-
-
-
 # ------------------------------------------------------------------------------
 # 1) Input data
 # ------------------------------------------------------------------------------
-
 
 # Lookup table defining the scenario grid and scenario metadata.
 # Expected: columns include rlz (realization id), and at least tavg, prcp.
@@ -220,7 +216,7 @@ scn_wght <- str_lookup |>
 # Custom columns
 result <- compute_weighted_impacts(
   scenario_weights = scn_wght,
-  impact_data = str_out_long,
+  impact_data = str_out,
   scenario_cols = list(scenario = c("scenario"), weight = "weight"),
   impact_cols = list(location = "location", value = "value"),
   realization_agg_fn = min, #stats::median,
@@ -233,3 +229,67 @@ result$summary
 # Detail: weighted impact per scenario per realization (dimensions depend on your inputs)
 result$by_realization
 
+
+# ------------------------------------------------------------------------------
+# 6) Visualizaton Radial Plot
+# ------------------------------------------------------------------------------
+
+results_future <- result$summary
+
+strid_base <- str_lookup |> filter(tavg == 0 & prcp == 0) |> pull(strid)
+strout_base <- str_out |> filter(strid == strid_base) |>
+  group_by(location) |>
+  summarize(base = mean(value))
+
+results_change <- result$summary %>%
+  left_join(strout_base, by = "location") %>%
+  mutate(change = (weighted_impact - base)/base * 100) %>%
+  mutate(change_abs = ifelse(change >= 0, 0, abs(change)))
+
+risk_level_colors <- c(
+  "No risk"     = "#2E7D32",  # deep muted green
+  "Low risk"    = "#A5C663",  # soft yellow-green
+  "Medium risk" = "#F0A202",  # warm amber
+  "High risk"   = "#C62828"   # dark muted red
+)
+
+results_change %>% filter(location == "Lobith")
+
+
+plot <- radial_plot(
+    data = results_change,
+    category = "location",
+    facet = "scenario",
+    value = "change_abs",
+    fill_mode   = "continuous",
+    fill_levels = c(0, 5, 10, 15, 20),
+    fill_colors = c("yellow", "black"), #risk_level_colors,
+    radial_breaks = seq(0,20,5),
+    start_angle = 90,
+    facet_nrow = 3,
+    theme_style = "minimal",
+    legend_title = "Risk",
+    spokes_extend_to = "max"
+)
+
+ggsave("TEMP/radialplot.png", height = 5, width = 10)
+
+
+################################################################################
+################################################################################
+
+plot <- radial_plot(
+  data = results_change,
+  category = "location",
+  facet = "scenario",
+  value = "change_abs",
+  fill_mode   = "continuous",
+  fill_levels = c(0, 5, 10, 15, 20),
+  fill_colors = risk_level_colors,
+  radial_breaks = seq(0,20,5),
+  start_angle = 90,
+  facet_nrow = 1,
+  theme_style = "clean",
+  legend_title = "Category",
+  spokes_extend_to = "max"
+)

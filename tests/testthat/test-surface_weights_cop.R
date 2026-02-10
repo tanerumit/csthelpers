@@ -1,3 +1,5 @@
+# Functions: compute_scenario_surface_weights_cop (R/scenario_surface_weights_cop.R)
+
 test_that("copula: basic output structure and normalization", {
   set.seed(21)
 
@@ -12,7 +14,7 @@ test_that("copula: basic output structure and normalization", {
     prcp = seq(5, 19, by = 0.5)
   )
 
-  out <- compute_scenario_surface_weights_copula(
+  out <- compute_scenario_surface_weights_cop(
     ensemble_data = ensemble_data,
     scenario_grid = scenario_grid,
     ta_col = "tavg",
@@ -27,11 +29,12 @@ test_that("copula: basic output structure and normalization", {
   )
 
   expect_s3_class(out, "data.frame")
-  expect_true(all(c("tavg", "prcp") %in% names(out)))
-  expect_true(all(c("SSP1", "SSP2") %in% names(out)))
+  expect_true(all(c("tavg", "prcp", "scenario", "weight") %in% names(out)))
 
-  expect_equal(sum(out$SSP1), 1, tolerance = 1e-10)
-  expect_equal(sum(out$SSP2), 1, tolerance = 1e-10)
+  sums <- tapply(out$weight, out$scenario, sum)
+  expect_true(all(c("SSP1", "SSP2") %in% names(sums)))
+  expect_equal(sums[["SSP1"]], 1, tolerance = 1e-10)
+  expect_equal(sums[["SSP2"]], 1, tolerance = 1e-10)
 })
 
 test_that("copula: diagnostics attributes exist and are consistent", {
@@ -48,7 +51,7 @@ test_that("copula: diagnostics attributes exist and are consistent", {
     prcp = seq(6, 17, by = 0.5)
   )
 
-  out <- compute_scenario_surface_weights_copula(
+  out <- compute_scenario_surface_weights_cop(
     ensemble_data = ensemble_data,
     scenario_grid = scenario_grid,
     bw_method = "nrd0",
@@ -88,7 +91,7 @@ test_that("copula: support masking zeros weights outside bounds", {
 
   support <- list(ta = c(0, 3), pr = c(8, 14))
 
-  out <- compute_scenario_surface_weights_copula(
+  out <- compute_scenario_surface_weights_cop(
     ensemble_data = ensemble_data,
     scenario_grid = scenario_grid,
     support = support,
@@ -99,11 +102,12 @@ test_that("copula: support masking zeros weights outside bounds", {
     verbose = FALSE
   )
 
-  inside <- scenario_grid$tavg >= 0 & scenario_grid$tavg <= 3 &
-            scenario_grid$prcp >= 8 & scenario_grid$prcp <= 14
+  inside <- out$tavg >= 0 & out$tavg <= 3 &
+    out$prcp >= 8 & out$prcp <= 14 &
+    out$scenario == "SSP1"
 
-  expect_true(all(out$SSP1[!inside] == 0))
-  expect_true(any(out$SSP1[inside] > 0))
+  expect_true(all(out$weight[!inside & out$scenario == "SSP1"] == 0))
+  expect_true(any(out$weight[inside] > 0))
 })
 
 test_that("copula: weights_col changes output relative to unweighted", {
@@ -129,7 +133,7 @@ test_that("copula: weights_col changes output relative to unweighted", {
     prcp = seq(5, 18, by = 0.5)
   )
 
-  out_unw <- compute_scenario_surface_weights_copula(
+  out_unw <- compute_scenario_surface_weights_cop(
     ensemble_data = subset(ensemble_data, select = -w),
     scenario_grid = scenario_grid,
     normalize = TRUE,
@@ -139,7 +143,7 @@ test_that("copula: weights_col changes output relative to unweighted", {
     verbose = FALSE
   )
 
-  out_w <- compute_scenario_surface_weights_copula(
+  out_w <- compute_scenario_surface_weights_cop(
     ensemble_data = ensemble_data,
     scenario_grid = scenario_grid,
     weights_col = "w",
@@ -150,9 +154,9 @@ test_that("copula: weights_col changes output relative to unweighted", {
     verbose = FALSE
   )
 
-  expect_gt(sum(abs(out_unw$SSP1 - out_w$SSP1)), 0.1)
-  expect_equal(sum(out_unw$SSP1), 1, tolerance = 1e-10)
-  expect_equal(sum(out_w$SSP1), 1, tolerance = 1e-10)
+  expect_gt(sum(abs(out_unw$weight - out_w$weight)), 0.1)
+  expect_equal(sum(out_unw$weight), 1, tolerance = 1e-10)
+  expect_equal(sum(out_w$weight), 1, tolerance = 1e-10)
 })
 
 test_that("copula: groups are skipped when insufficient samples or near-zero variance", {
@@ -170,7 +174,7 @@ test_that("copula: groups are skipped when insufficient samples or near-zero var
   )
 
   out <- suppressWarnings(
-    compute_scenario_surface_weights_copula(
+    compute_scenario_surface_weights_cop(
       ensemble_data = ensemble_data,
       scenario_grid = scenario_grid,
       min_samples = 5L,
@@ -187,9 +191,9 @@ test_that("copula: groups are skipped when insufficient samples or near-zero var
   expect_true("TOOSMALL" %in% skipped)
   expect_false("OK" %in% skipped)
 
-  expect_true("OK" %in% names(out))
-  expect_false("ZEROVAR" %in% names(out))
-  expect_false("TOOSMALL" %in% names(out))
+  expect_true("OK" %in% out$scenario)
+  expect_false("ZEROVAR" %in% out$scenario)
+  expect_false("TOOSMALL" %in% out$scenario)
 })
 
 test_that("copula: input validation errors for missing columns and empty surface", {
@@ -197,7 +201,7 @@ test_that("copula: input validation errors for missing columns and empty surface
   scenario_grid <- data.frame(tavg = numeric(0), prcp = numeric(0))
 
   expect_error(
-    compute_scenario_surface_weights_copula(
+    compute_scenario_surface_weights_cop(
       ensemble_data = ensemble_data,
       scenario_grid = scenario_grid,
       verbose = FALSE
@@ -206,7 +210,7 @@ test_that("copula: input validation errors for missing columns and empty surface
   )
 
   expect_error(
-    compute_scenario_surface_weights_copula(
+    compute_scenario_surface_weights_cop(
       ensemble_data = data.frame(tavg = 1:5, scenario = "SSP1"),
       scenario_grid = data.frame(tavg = 1, prcp = 1),
       verbose = FALSE
@@ -230,7 +234,7 @@ test_that("copula: rho is near zero for independent marginals (approx)", {
     prcp = seq(6, 14, by = 0.5)
   )
 
-  out <- compute_scenario_surface_weights_copula(
+  out <- compute_scenario_surface_weights_cop(
     ensemble_data = ensemble_data,
     scenario_grid = scenario_grid,
     bw_method = "nrd0",
@@ -245,3 +249,4 @@ test_that("copula: rho is near zero for independent marginals (approx)", {
   expect_true(is.finite(rho))
   expect_lt(abs(rho), 0.3)  # loose tolerance; KDE-CDF pseudo obs is approximate
 })
+
