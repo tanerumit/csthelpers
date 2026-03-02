@@ -14,7 +14,14 @@ radial_style(
   spoke_color = "grey50",
   spoke_linetype = "dashed",
   grid_color = "grey80",
-  strip_text_size = 11
+  strip_text_size = 11,
+  radial_breaks = NULL,
+  radial_limits = NULL,
+  start_angle = 30,
+  clockwise = FALSE,
+  show_grid_circles = TRUE,
+  show_value_labels = FALSE,
+  legend_position = c("bottom", "right")
 )
 }
 \arguments{
@@ -37,6 +44,30 @@ radial_style(
 \item{grid_color}{Color of concentric grid circles. Default "grey80".}
 
 \item{strip_text_size}{Size of facet strip text. Default 11.}
+
+\item{radial_breaks}{Numeric vector of radial axis breaks (must include 0).
+If `NULL`, computed via `pretty(c(0, max(value)))`.}
+
+\item{radial_limits}{Numeric vector of length 2 giving `c(lower, upper)` for
+the radial axis. If `NULL` (default), computed as
+`c(0, max(radial_breaks) + step)` where step is the spacing between
+consecutive breaks. Category labels are placed one step inside the upper
+limit.}
+
+\item{start_angle}{Numeric scalar. Angle in degrees where the first category
+is placed. Default 90 (top).}
+
+\item{clockwise}{Logical scalar. If `TRUE`, categories proceed clockwise.
+Default `FALSE`.}
+
+\item{show_grid_circles}{Logical scalar. If `TRUE`, draws concentric circles
+at positive `radial_breaks`. Default `TRUE`.}
+
+\item{show_value_labels}{Logical scalar. If `TRUE`, adds numeric labels above
+bars (rounded to 1 decimal). Default `FALSE`.}
+
+\item{legend_position}{Character scalar. One of `"right"` or `"bottom"`.
+Controls placement of the fill legend. Default `"right"`.}
 }
 \value{
 A list of styling parameters.
@@ -47,11 +78,11 @@ All parameters have sensible defaults; only specify what you want to change.
 }
 \examples{
 # Use defaults
-radial_plot(df, category, value, fill)
+radial_plot(df, category, value)
 
 # Customize specific styles
-radial_plot(df, category, value, fill,
-  style = radial_style(bar_alpha = 0.6, category_label_size = 4)
+radial_plot(df, category, value,
+  style = radial_style(bar_alpha = 0.6, category_label_size = 4, clockwise = TRUE)
 )
 
 }

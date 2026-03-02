@@ -9,98 +9,103 @@ radial_plot(
   category,
   value,
   facet = NULL,
-  fill_mode = c("none", "binned", "continuous"),
-  fill_levels = NULL,
-  fill_colors = NULL,
-  radial_breaks = NULL,
-  radial_expand = 1.1,
-  start_angle = 90,
-  clockwise = FALSE,
-  show_spokes = TRUE,
-  spokes_extend_to = c("max", "value", "none"),
-  show_grid_circles = TRUE,
-  show_value_labels = FALSE,
-  legend_title = NULL,
+  fill = NULL,
+  palette = NULL,
+  limits = NULL,
+  na_color = NA,
   facet_nrow = NULL,
-  theme_style = c("minimal", "clean", "classic"),
   style = radial_style(),
   na_handling = c("warn", "silent", "error")
 )
 }
 \arguments{
-\item{data}{A data frame.}
+\item{data}{A non-empty `data.frame`.}
 
-\item{category}{Column for circular axis categories (spokes).}
+\item{category}{Column for circular axis categories. Unquoted name or a single
+character string naming a column in `data`.}
 
-\item{value}{Numeric column for bar length (radial magnitude).}
+\item{value}{Numeric column for bar length (radial magnitude). Must be numeric
+and not entirely `NA`.}
 
-\item{facet}{Column for faceting into panels. If NULL, no faceting.}
+\item{facet}{Optional faceting column. If `NULL`, no faceting.}
 
-\item{fill_colors}{For discrete fill: named character vector of colors.
-For continuous fill: length-2 vector of low/high colors.
-If NULL, uses sensible defaults (viridis-inspired palette).}
+\item{fill}{Column to map to bar fill color. Defaults to `value` (continuous
+gradient by bar height). May point to a discrete (character/factor) or
+numeric column. Unquoted name or a single character string.}
 
-\item{radial_breaks}{Numeric vector of radial axis breaks (must include 0).
-If NULL, computed automatically.}
+\item{palette}{Colors for the fill scale.
+- *Discrete fill*: a named vector mapping level names to colors, or an
+  unnamed vector matched positionally to the levels. `NULL` applies a
+  built-in green-to-red palette.
+- *Continuous fill*: a character vector of length >= 2 defining the
+  gradient (evenly spaced for 3+ colors). `NULL` uses yellow-to-red.}
 
-\item{radial_expand}{Expansion factor beyond max break. Default 1.1.}
+\item{limits}{Numeric vector of length 2 (`c(lo, hi)`). Only used when `fill`
+is continuous; sets the gradient scale limits (values outside are squished
+to the nearest endpoint). Ignored for discrete fill.}
 
-\item{start_angle}{Angle (degrees) where first category is placed. Default 90 (top).}
+\item{na_color}{Color used for `NA` fill values. Default `NA` (transparent).}
 
-\item{clockwise}{Logical. If TRUE, categories proceed clockwise. Default FALSE.}
+\item{facet_nrow}{Integer or `NULL`. Number of rows for `facet_wrap()`. `NULL`
+lets ggplot2 choose.}
 
-\item{show_spokes}{Logical. Show spoke lines? Default TRUE.}
+\item{style}{A `radial_style()` object controlling aesthetics and layout
+(bar sizing, colors, label sizes, spoke/grid styling, radial breaks,
+angular orientation, and display toggles).}
 
-\item{spokes_extend_to}{One of "max", "value", or "none". Default "max".}
-
-\item{show_grid_circles}{Logical. Show concentric circles? Default TRUE.}
-
-\item{show_value_labels}{Logical. Show value labels on bars? Default FALSE.}
-
-\item{legend_title}{Title for fill legend. Default uses column name or NULL if no fill.}
-
-\item{facet_nrow}{Number of rows for facet layout. NULL for auto.}
-
-\item{theme_style}{One of "minimal", "clean", or "classic". Default "minimal".}
-
-\item{style}{A `radial_style()` object for fine-grained visual control.}
-
-\item{na_handling}{How to handle NA values: "warn", "silent", or "error".}
-
-\item{fill}{Column for fill color grouping. If NULL, uses a single default color.
-Can be discrete (factor/character) or continuous (numeric).}
-
-\item{default_fill}{Single color used when `fill` is NULL. Default "#4575b4".}
+\item{na_handling}{Character scalar. One of `"warn"`, `"silent"`, `"error"`.
+Controls behavior when `value` contains `NA`s.}
 }
 \value{
-A ggplot object.
+A `ggplot2` plot object.
 }
 \description{
-Generates a radial bar plot for visualizing categorical groups arranged
-around a circle with corresponding numeric values, optionally faceted.
+Generates a radial bar plot (polar-coordinate columns) for categorical groups
+arranged around a circle, optionally faceted.
+}
+\details{
+`category`, `value`, and `fill` are tidy-evaluated and may be unquoted column
+names or a single character string naming a column in `data`. If `facet` is
+`NULL`, all data are plotted in a single panel (internally labelled `"all"`).
+
+**Fill behavior** is inferred from the type of the `fill` column:
+- *Discrete* (character or factor): bars are colored by level using
+  `scale_fill_manual()`. `palette` should be a named vector mapping levels to
+  colors, or an unnamed vector matched by position. A default green-to-red
+  palette is used when `palette = NULL`.
+- *Continuous* (numeric): bars are colored by a gradient using
+  `scale_fill_gradient()` (2 colors) or `scale_fill_gradientn()` (3+ colors).
+  `palette` should be a color vector of length >= 2. `limits` pins the gradient
+  endpoints. A yellow-to-red default is used when `palette = NULL`.
+
+Missing values in `value` are dropped. Behavior is controlled by `na_handling`.
+Spokes always extend to the outermost radial break. Layout and display options
+are controlled via `radial_style()`.
 }
 \examples{
 df <- data.frame(
-  site = rep(c("A", "B", "C", "D"), 3),
+  site     = rep(c("A", "B", "C", "D"), 3),
   scenario = rep(c("Low", "Mid", "High"), each = 4),
-  value = runif(12, 5, 30),
-  risk = sample(c("Low", "Medium", "High"), 12, replace = TRUE),
-  score = runif(12, 0, 100)
+  value    = runif(12, 5, 30),
+  class    = sample(c("Low", "Med", "High"), 12, replace = TRUE)
 )
 
-# No fill - single color
+# Default: continuous gradient fill by bar height
 radial_plot(df, category = site, value = value)
 
-# Discrete fill with auto colors
-radial_plot(df, category = site, value = value, fill = risk)
-
-# Continuous fill
-radial_plot(df, site, value, fill = score)
-
-# With faceting and custom colors
-radial_plot(df, site, value, risk,
-  facet = scenario,
-  fill_colors = c(Low = "green", Medium = "orange", High = "red")
+# Discrete fill from a separate column
+radial_plot(df, site, value,
+  fill    = class,
+  palette = c(Low = "#009E73", Med = "#E69F00", High = "#C00000")
 )
+
+# Continuous fill with custom gradient and clamped limits
+radial_plot(df, site, value,
+  palette = c("steelblue", "white", "firebrick"),
+  limits  = c(0, 30)
+)
+
+# Faceted
+radial_plot(df, site, value, facet = scenario)
 
 }
