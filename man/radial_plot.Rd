@@ -33,28 +33,18 @@ and not entirely `NA`.}
 gradient by bar height). May point to a discrete (character/factor) or
 numeric column. Unquoted name or a single character string.}
 
-\item{palette}{Colors for the fill scale.
-- *Discrete fill*: a named vector mapping level names to colors, or an
-  unnamed vector matched positionally to the levels. `NULL` applies a
-  built-in green-to-red palette.
-- *Continuous fill*: a character vector of length >= 2 defining the
-  gradient (evenly spaced for 3+ colors). `NULL` uses yellow-to-red.}
+\item{palette}{Colors for the fill scale.}
 
 \item{limits}{Numeric vector of length 2 (`c(lo, hi)`). Only used when `fill`
-is continuous; sets the gradient scale limits (values outside are squished
-to the nearest endpoint). Ignored for discrete fill.}
+is continuous.}
 
 \item{na_color}{Color used for `NA` fill values. Default `NA` (transparent).}
 
-\item{facet_nrow}{Integer or `NULL`. Number of rows for `facet_wrap()`. `NULL`
-lets ggplot2 choose.}
+\item{facet_nrow}{Integer or `NULL`. Number of rows for `facet_wrap()`.}
 
-\item{style}{A `radial_style()` object controlling aesthetics and layout
-(bar sizing, colors, label sizes, spoke/grid styling, radial breaks,
-angular orientation, and display toggles).}
+\item{style}{A `radial_style()` object controlling aesthetics and layout.}
 
-\item{na_handling}{Character scalar. One of `"warn"`, `"silent"`, `"error"`.
-Controls behavior when `value` contains `NA`s.}
+\item{na_handling}{Character scalar. One of `"warn"`, `"silent"`, `"error"`.}
 }
 \value{
 A `ggplot2` plot object.
@@ -81,31 +71,4 @@ names or a single character string naming a column in `data`. If `facet` is
 Missing values in `value` are dropped. Behavior is controlled by `na_handling`.
 Spokes always extend to the outermost radial break. Layout and display options
 are controlled via `radial_style()`.
-}
-\examples{
-df <- data.frame(
-  site     = rep(c("A", "B", "C", "D"), 3),
-  scenario = rep(c("Low", "Mid", "High"), each = 4),
-  value    = runif(12, 5, 30),
-  class    = sample(c("Low", "Med", "High"), 12, replace = TRUE)
-)
-
-# Default: continuous gradient fill by bar height
-radial_plot(df, category = site, value = value)
-
-# Discrete fill from a separate column
-radial_plot(df, site, value,
-  fill    = class,
-  palette = c(Low = "#009E73", Med = "#E69F00", High = "#C00000")
-)
-
-# Continuous fill with custom gradient and clamped limits
-radial_plot(df, site, value,
-  palette = c("steelblue", "white", "firebrick"),
-  limits  = c(0, 30)
-)
-
-# Faceted
-radial_plot(df, site, value, facet = scenario)
-
 }

@@ -37,7 +37,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' p <- plot_basin_map(
+#' p <- plot_basin_base(
 #'   basins_sf = basins_sf,
 #'   subbasins_sf = subbasins_sf,
 #'   rivers_sf = rivers_sf,
@@ -55,7 +55,7 @@
 #' @importFrom dplyr filter
 #' @import ggplot2
 #' @export
-plot_basin_map <- function(
+plot_basin_base <- function(
     basins_sf = NULL,
     subbasins_sf = NULL,
     rivers_sf = NULL,
@@ -412,4 +412,314 @@ plot_basin_map <- function(
   attr(p, "bbox_plot") <- plot_bbox
 
   p
+}
+
+
+#' Styling options for plot_basin_point_feature point/label layers
+#'
+#' @description
+#' Creates a list of visual styling parameters for the point and label layers
+#' added by `plot_basin_point_feature()`.
+#'
+#' @param point_shape Shape code for site points. Default 21 (filled circle).
+#' @param point_color Outline color for site points. Default `"grey20"`.
+#' @param point_stroke Stroke width for site point outlines. Default 0.8.
+#' @param label_fill Fill color for site labels. Default `"white"`.
+#' @param label_color Text color for site labels. Default `"black"`.
+#' @param label_size Font size for site labels. Default 3.
+#' @param label_vjust Vertical justification for labels. Default 0.25.
+#' @param label_hjust Horizontal justification for labels. Default -0.25.
+#' @param label_linewidth Border linewidth for label boxes. Default 0.1.
+#' @param strip_text_size Size of facet strip text. Default 11.
+#'
+#' @return A list of styling parameters with class `"point_feature_style"`.
+#' @export
+point_feature_style <- function(
+    point_shape      = 21L,
+    point_color      = "grey20",
+    point_stroke     = 0.8,
+    label_fill       = "white",
+    label_color      = "black",
+    label_size       = 3,
+    label_vjust      = 0.25,
+    label_hjust      = -0.25,
+    label_linewidth  = 0,
+    strip_text_size  = 11
+) {
+
+  .check_range <- function(x, name, lo, hi) {
+    if (!is.numeric(x) || length(x) != 1L || is.na(x) || x < lo || x > hi) {
+      stop(sprintf("`%s` must be a number between %s and %s.", name, lo, hi),
+           call. = FALSE)
+    }
+  }
+
+  .check_range(point_stroke,    "point_stroke",    0, 5)
+  .check_range(label_size,      "label_size",      0.5, 10)
+  .check_range(label_linewidth, "label_linewidth", 0, 2)
+  .check_range(strip_text_size, "strip_text_size", 5, 30)
+
+  structure(
+    list(
+      point_shape      = as.integer(point_shape),
+      point_color      = point_color,
+      point_stroke     = point_stroke,
+      label_fill       = label_fill,
+      label_color      = label_color,
+      label_size       = label_size,
+      label_vjust      = label_vjust,
+      label_hjust      = label_hjust,
+      label_linewidth  = label_linewidth,
+      strip_text_size  = strip_text_size
+    ),
+    class = "point_feature_style"
+  )
+}
+
+
+#' Add sized and colored site markers to an existing map
+#'
+#' @description
+#' Takes an existing `ggplot` object (typically from `plot_basin_base()`) and
+#' layers on site points with fill and size encodings, optional labels, and
+#' optional faceting. The base-map sf layers are repeated across facet panels
+#' automatically by ggplot2.
+#'
+#' @details
+#' Column arguments (`x_col`, `y_col`, `fill_col`, `size_col`, `label_col`,
+#' `facet_col`) accept either unquoted column names or single character strings.
+#'
+#' **Fill modes:**
+#' \itemize{
+#'   \item `"manual"` (default): `fill_colors` is a named character vector
+#'     passed to `scale_fill_manual(drop = FALSE)`.
+#'   \item `"continuous"`: `fill_col` must be numeric; `fill_colors` (>= 2
+#'     colors) defines the gradient via `scale_fill_gradientn()`.
+#' }
+#'
+#' @param p A `ggplot` object to add layers to (e.g., from `plot_basin_base()`).
+#' @param data A non-empty `data.frame` with site-level data.
+#' @param x_col Column with x-coordinates (longitude).
+#' @param y_col Column with y-coordinates (latitude).
+#' @param fill_col Column for point fill color.
+#' @param size_col Numeric column for point size.
+#' @param label_col Optional column for site labels. `NULL` = no labels.
+#' @param facet_col Optional column for faceting. `NULL` = no faceting.
+#' @param fill_mode One of `"manual"` or `"continuous"`.
+#' @param fill_colors Named color vector (manual) or >= 2 color vector
+#'   (continuous). `NULL` uses defaults.
+#' @param fill_title Legend title for fill. `NULL` uses column name.
+#' @param size_range Numeric length-2, min/max point sizes. Default `c(2, 6)`.
+#' @param size_breaks Numeric vector of size legend breaks. `NULL` = auto.
+#' @param size_limits Numeric length-2, size scale limits. `NULL` = auto.
+#' @param size_title Legend title for size. `NULL` uses column name.
+#' @param facet_nrow Integer or `NULL`. Rows for `facet_wrap()`.
+#' @param show_labels Logical. Draw labels? Default `TRUE`.
+#' @param style A `point_feature_style()` object.
+#'
+#' @return A `ggplot2` plot object.
+#'
+#' @examples
+#' \dontrun{
+#' p_base <- plot_basin_base(
+#'   basins_sf = basins_sf,
+#'   rivers_sf = rivers_sf,
+#'   min_stream_order = 3
+#' )
+#'
+#' plot_basin_point_feature(
+#'   p         = p_base,
+#'   data      = ggs,
+#'   x_col     = x,
+#'   y_col     = y,
+#'   fill_col  = `Risk Level`,
+#'   size_col  = perc_outside,
+#'   label_col = site,
+#'   facet_col = scenario,
+#'   fill_colors = c("No change" = "#009E73", "Low" = "#F0E442",
+#'                    "Medium" = "#E69F00", "High" = "#C00000"),
+#'   fill_title  = "Risk Level",
+#'   size_range  = c(2, 6),
+#'   size_breaks = seq(30, 60, 10),
+#'   size_limits = c(30, 60),
+#'   size_title  = "Metrics\noutside (%)",
+#'   facet_nrow  = 1
+#' )
+#' }
+#'
+#' @import ggplot2
+#' @importFrom rlang enquo quo_is_null quo_is_call quo_is_symbol eval_tidy sym
+#'   as_label
+#' @importFrom dplyr distinct
+#' @export
+plot_basin_point_feature <- function(
+    p,
+    data,
+    x_col,
+    y_col,
+    fill_col,
+    size_col,
+    label_col   = NULL,
+    facet_col   = NULL,
+    fill_mode   = c("manual", "continuous"),
+    fill_colors = NULL,
+    fill_title  = NULL,
+    size_range  = c(2, 6),
+    size_breaks = NULL,
+    size_limits = NULL,
+    size_title  = NULL,
+    facet_nrow  = NULL,
+    show_labels = TRUE,
+    style       = point_feature_style()
+) {
+
+  fill_mode <- match.arg(fill_mode)
+
+  if (!inherits(p, "ggplot")) {
+    stop("`p` must be a ggplot object.", call. = FALSE)
+  }
+  if (!is.data.frame(data) || nrow(data) == 0L) {
+    stop("`data` must be a non-empty data.frame.", call. = FALSE)
+  }
+  if (!is.numeric(size_range) || length(size_range) != 2L ||
+      anyNA(size_range) || size_range[1] >= size_range[2]) {
+    stop("`size_range` must be numeric length 2 with min < max.", call. = FALSE)
+  }
+  if (!is.logical(show_labels) || length(show_labels) != 1L || is.na(show_labels)) {
+    stop("`show_labels` must be TRUE or FALSE.", call. = FALSE)
+  }
+
+  if (!inherits(style, "point_feature_style")) style <- point_feature_style()
+  sty <- style
+
+  # --- Column resolution ---------------------------------------------------
+  .as_col <- function(x, data) {
+    x_quo <- rlang::enquo(x)
+    if (rlang::quo_is_call(x_quo) || rlang::quo_is_symbol(x_quo)) return(x_quo)
+    x_val <- rlang::eval_tidy(x_quo)
+    if (is.character(x_val) && length(x_val) == 1L && x_val %in% names(data)) {
+      return(rlang::sym(x_val))
+    }
+    x_quo
+  }
+
+  x_sym    <- .as_col({{ x_col }}, data)
+  y_sym    <- .as_col({{ y_col }}, data)
+  fill_sym <- .as_col({{ fill_col }}, data)
+  size_sym <- .as_col({{ size_col }}, data)
+
+  label_quo <- rlang::enquo(label_col)
+  has_label <- !rlang::quo_is_null(label_quo)
+  if (has_label) label_sym <- .as_col({{ label_col }}, data)
+
+  facet_quo <- rlang::enquo(facet_col)
+  has_facet <- !rlang::quo_is_null(facet_quo)
+  if (has_facet) facet_sym <- .as_col({{ facet_col }}, data)
+
+  # --- Validate columns -----------------------------------------------------
+  .check_col <- function(sym, data, param_name) {
+    col_name <- rlang::as_label(sym)
+    if (!col_name %in% names(data)) {
+      stop(sprintf("Column `%s` (from `%s`) not found in `data`.",
+                   col_name, param_name), call. = FALSE)
+    }
+  }
+
+  .check_col(x_sym,    data, "x_col")
+  .check_col(y_sym,    data, "y_col")
+  .check_col(fill_sym, data, "fill_col")
+  .check_col(size_sym, data, "size_col")
+  if (has_label) .check_col(label_sym, data, "label_col")
+  if (has_facet) .check_col(facet_sym, data, "facet_col")
+
+  size_vals <- rlang::eval_tidy(size_sym, data)
+  fill_vals <- rlang::eval_tidy(fill_sym, data)
+
+  if (!is.numeric(rlang::eval_tidy(x_sym, data))) stop("`x_col` must be numeric.", call. = FALSE)
+  if (!is.numeric(rlang::eval_tidy(y_sym, data))) stop("`y_col` must be numeric.", call. = FALSE)
+  if (!is.numeric(size_vals)) stop("`size_col` must be numeric.", call. = FALSE)
+  if (fill_mode == "continuous" && !is.numeric(fill_vals)) {
+    stop("`fill_col` must be numeric when `fill_mode` is \"continuous\".", call. = FALSE)
+  }
+
+  # --- Defaults -------------------------------------------------------------
+  if (is.null(fill_title)) fill_title <- rlang::as_label(fill_sym)
+  if (is.null(size_title)) size_title <- rlang::as_label(size_sym)
+
+  if (is.null(size_limits)) size_limits <- range(size_vals, na.rm = TRUE)
+  if (is.null(size_breaks)) {
+    size_breaks <- pretty(size_limits)
+    size_breaks <- size_breaks[size_breaks >= size_limits[1] &
+                                 size_breaks <= size_limits[2]]
+  }
+
+  # --- Labels (de-duplicated per location per facet) ------------------------
+  if (has_label && show_labels) {
+    if (has_facet) {
+      label_df <- dplyr::distinct(data, !!label_sym, !!x_sym, !!y_sym, !!facet_sym)
+    } else {
+      label_df <- dplyr::distinct(data, !!label_sym, !!x_sym, !!y_sym)
+    }
+
+    p <- p + ggplot2::geom_label(
+      data    = label_df,
+      mapping = ggplot2::aes(x = !!x_sym, y = !!y_sym, label = !!label_sym),
+      fill      = sty$label_fill,
+      color     = sty$label_color,
+      linewidth = sty$label_linewidth,
+      label.r   = grid::unit(0.15, "lines"),
+      vjust     = sty$label_vjust,
+      hjust     = sty$label_hjust,
+      size      = sty$label_size
+    )
+  }
+
+  # --- Points ---------------------------------------------------------------
+  p <- p + ggplot2::geom_point(
+    data    = data,
+    mapping = ggplot2::aes(
+      x = !!x_sym, y = !!y_sym, fill = !!fill_sym, size = !!size_sym
+    ),
+    shape       = sty$point_shape,
+    color       = sty$point_color,
+    stroke      = sty$point_stroke,
+    show.legend = TRUE
+  )
+
+  # --- Fill scale -----------------------------------------------------------
+  if (fill_mode == "manual") {
+    if (!is.null(fill_colors)) {
+      p <- p + ggplot2::scale_fill_manual(
+        values = fill_colors, name = fill_title,
+        labels = names(fill_colors), drop = FALSE
+      )
+    } else {
+      p <- p + ggplot2::labs(fill = fill_title)
+    }
+  } else {
+    if (is.null(fill_colors)) fill_colors <- c("yellow", "red")
+    if (length(fill_colors) < 2L) {
+      stop("For continuous `fill_mode`, `fill_colors` must have length >= 2.", call. = FALSE)
+    }
+    p <- p + ggplot2::scale_fill_gradientn(
+      colors = fill_colors, name = fill_title,
+      limits = range(fill_vals, na.rm = TRUE), oob = scales::squish
+    )
+  }
+
+  # --- Size scale -----------------------------------------------------------
+  p <- p + ggplot2::scale_size(
+    range = size_range, breaks = size_breaks,
+    limits = size_limits, name = size_title
+  )
+
+  # --- Faceting -------------------------------------------------------------
+  if (has_facet) {
+    p <- p + ggplot2::facet_wrap(ggplot2::vars(!!facet_sym), nrow = facet_nrow)
+  }
+
+  # --- Strip text -----------------------------------------------------------
+  p + ggplot2::theme(
+    strip.text = ggplot2::element_text(size = sty$strip_text_size)
+  )
 }

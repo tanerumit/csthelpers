@@ -47,13 +47,13 @@
 radial_style <- function(
     bar_width = 0.75,
     bar_alpha = 0.85,
-    bar_border_color = "grey30",
+    bar_border_color = "grey40",
     category_label_size = 3,
     tick_label_size = 2.5,
     value_label_size = 2.5,
-    spoke_color = "grey50",
+    spoke_color = "grey60",
     spoke_linetype = "dashed",
-    grid_color = "grey80",
+    grid_color = "grey90",
     strip_text_size = 11,
     radial_breaks = NULL,
     radial_limits = NULL,
@@ -170,50 +170,14 @@ radial_style <- function(
 #'   gradient by bar height). May point to a discrete (character/factor) or
 #'   numeric column. Unquoted name or a single character string.
 #' @param palette Colors for the fill scale.
-#'   - *Discrete fill*: a named vector mapping level names to colors, or an
-#'     unnamed vector matched positionally to the levels. `NULL` applies a
-#'     built-in green-to-red palette.
-#'   - *Continuous fill*: a character vector of length >= 2 defining the
-#'     gradient (evenly spaced for 3+ colors). `NULL` uses yellow-to-red.
 #' @param limits Numeric vector of length 2 (`c(lo, hi)`). Only used when `fill`
-#'   is continuous; sets the gradient scale limits (values outside are squished
-#'   to the nearest endpoint). Ignored for discrete fill.
+#'   is continuous.
 #' @param na_color Color used for `NA` fill values. Default `NA` (transparent).
-#' @param facet_nrow Integer or `NULL`. Number of rows for `facet_wrap()`. `NULL`
-#'   lets ggplot2 choose.
-#' @param style A `radial_style()` object controlling aesthetics and layout
-#'   (bar sizing, colors, label sizes, spoke/grid styling, radial breaks,
-#'   angular orientation, and display toggles).
+#' @param facet_nrow Integer or `NULL`. Number of rows for `facet_wrap()`.
+#' @param style A `radial_style()` object controlling aesthetics and layout.
 #' @param na_handling Character scalar. One of `"warn"`, `"silent"`, `"error"`.
-#'   Controls behavior when `value` contains `NA`s.
 #'
 #' @return A `ggplot2` plot object.
-#'
-#' @examples
-#' df <- data.frame(
-#'   site     = rep(c("A", "B", "C", "D"), 3),
-#'   scenario = rep(c("Low", "Mid", "High"), each = 4),
-#'   value    = runif(12, 5, 30),
-#'   class    = sample(c("Low", "Med", "High"), 12, replace = TRUE)
-#' )
-#'
-#' # Default: continuous gradient fill by bar height
-#' radial_plot(df, category = site, value = value)
-#'
-#' # Discrete fill from a separate column
-#' radial_plot(df, site, value,
-#'   fill    = class,
-#'   palette = c(Low = "#009E73", Med = "#E69F00", High = "#C00000")
-#' )
-#'
-#' # Continuous fill with custom gradient and clamped limits
-#' radial_plot(df, site, value,
-#'   palette = c("steelblue", "white", "firebrick"),
-#'   limits  = c(0, 30)
-#' )
-#'
-#' # Faceted
-#' radial_plot(df, site, value, facet = scenario)
 #'
 #' @import ggplot2
 #' @importFrom rlang .data enquo as_label quo_is_null
@@ -248,6 +212,15 @@ radial_plot <- function(
 
   if (!is.data.frame(data) || nrow(data) == 0L) {
     stop("`data` must be a non-empty data.frame.", call. = FALSE)
+  }
+
+  # Legend bar geometry (pt)
+  if (legend_position == "bottom") {
+    legend_barwidth_pt  <- 150
+    legend_barheight_pt <- 10
+  } else {
+    legend_barwidth_pt  <- 10
+    legend_barheight_pt <- 150
   }
 
   # ---------------------------------------------------------------------------
@@ -304,10 +277,7 @@ radial_plot <- function(
   if (!is.numeric(df$.val)) stop("`value` column must be numeric.", call. = FALSE)
 
   n_na <- sum(is.na(df$.val))
-
-  if (all(is.na(df$.val))) {
-    stop("`value` contains only NA values.", call. = FALSE)
-  }
+  if (all(is.na(df$.val))) stop("`value` contains only NA values.", call. = FALSE)
 
   if (n_na > 0L) {
     msg <- sprintf("`value` contains %d NA(s); these will not be plotted.", n_na)
@@ -320,6 +290,7 @@ radial_plot <- function(
 
   cat_levels   <- unique(df$.cat)
   facet_levels <- unique(df$.facet)
+
   df$.cat   <- factor(df$.cat,   levels = cat_levels)
   df$.facet <- factor(df$.facet, levels = facet_levels)
 
@@ -365,24 +336,24 @@ radial_plot <- function(
         if (length(missing_lvls) > 0L) {
           stop(
             sprintf("`palette` is missing colors for level(s): %s",
-                    paste(missing_lvls, collapse = ", ")),
+                    paste(missing_lvls, collapse = ", ")
+            ),
             call. = FALSE
           )
         }
-        palette <- palette[fill_levels_ord]   # reorder; extra names silently dropped
+        palette <- palette[fill_levels_ord]
       } else {
         if (length(palette) != length(fill_levels_ord)) {
           stop(
             sprintf("Unnamed `palette` must have length %d (one per fill level).",
-                    length(fill_levels_ord)),
+                    length(fill_levels_ord)
+            ),
             call. = FALSE
           )
         }
         names(palette) <- fill_levels_ord
       }
     } else {
-
-      # Default discrete palette: green -> amber -> orange -> red, extended if needed
       default_pal <- c("#2E7D32", "#F0E442", "#E69F00", "#C00000")
       n <- length(fill_levels_ord)
       pal <- if (n <= length(default_pal)) {
@@ -397,13 +368,15 @@ radial_plot <- function(
     fill_na_val <- factor(NA_character_, levels = fill_levels_ord)
 
   } else {
-    # Continuous fill --------------------------------------------------------
-    df$.fill <- df$.fill_raw   # numeric; kept as-is
+
+    df$.fill <- df$.fill_raw
 
     if (!is.null(palette)) {
       if (!is.character(palette) || length(palette) < 2L) {
-        stop("For continuous fill, `palette` must be a character vector of length >= 2.",
-             call. = FALSE)
+        stop(
+          "For continuous fill, `palette` must be a character vector of length >= 2.",
+          call. = FALSE
+        )
       }
     } else {
       palette <- c("yellow", "red")
@@ -448,7 +421,6 @@ radial_plot <- function(
 
   y_max <- max(radial_breaks)
 
-  # Compute uniform step from radial_breaks
   pos_breaks <- radial_breaks[radial_breaks > 0]
   radial_step <- if (length(pos_breaks) >= 2L) {
     min(diff(sort(pos_breaks)))
@@ -456,13 +428,12 @@ radial_plot <- function(
     y_max
   }
 
-  # Compute radial_limits if not supplied
   if (is.null(radial_limits)) {
     radial_limits <- c(0, y_max + radial_step)
   }
 
-  y_outer  <- radial_limits[2]
-  label_y  <- y_outer - radial_step/3
+  y_outer <- radial_limits[2]
+  label_y <- y_outer - radial_step / 3
 
   # ---------------------------------------------------------------------------
   # GAP sector (creates the opening gap in the polar plot)
@@ -483,6 +454,7 @@ radial_plot <- function(
 
   label_df <- data.frame(.cat = factor(cat_levels, levels = c(cat_levels, "GAP")))
 
+  # Tick labels on the GAP axis
   tick_df <- expand.grid(
     .facet = facet_levels,
     .cat   = factor("GAP", levels = c(cat_levels, "GAP")),
@@ -490,9 +462,24 @@ radial_plot <- function(
     stringsAsFactors = FALSE
   )
 
-  spoke_df <- df_plot |>
-    dplyr::filter(.data$.cat != "GAP", !is.na(.data$.val)) |>
-    dplyr::mutate(.yend = y_max)
+  # ---------------------------------------------------------------------------
+  # Spokes: ALWAYS draw for every category (even when bar missing / .val is NA)
+  # ---------------------------------------------------------------------------
+  spoke_df <- expand.grid(
+    .facet = facet_levels,
+    .cat   = factor(cat_levels, levels = c(cat_levels, "GAP")),
+    stringsAsFactors = FALSE
+  )
+  spoke_df$.yend <- y_max
+
+  # Value-axis line at GAP position (so 5/10/15/20 read as an axis)
+  axis_df <- data.frame(
+    .facet = facet_levels,
+    .cat   = factor("GAP", levels = c(cat_levels, "GAP")),
+    .y     = 0,
+    .yend  = y_max,
+    stringsAsFactors = FALSE
+  )
 
   if (show_value_labels) {
     value_label_df <- df_plot |>
@@ -502,42 +489,53 @@ radial_plot <- function(
   # ---------------------------------------------------------------------------
   # Theme
   # ---------------------------------------------------------------------------
-  base_theme <- ggplot2::theme_bw() +
-    ggplot2::theme(
-      axis.text       = ggplot2::element_blank(),
-      axis.title      = ggplot2::element_blank(),
-      axis.ticks      = ggplot2::element_blank(),
+  base_theme <- theme_bw() +
+    theme(
+      axis.text        = element_blank(),
+      axis.title       = element_blank(),
+      axis.ticks       = element_blank(),
       panel.background = element_rect(fill = NA, colour = NA),
-      panel.grid.major.x = ggplot2::element_blank(),
-      panel.grid.minor   = ggplot2::element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor   = element_blank(),
       panel.grid.major.y = if (show_grid_circles) {
-        ggplot2::element_line(color = sty$grid_color, linewidth = 0.3)
+        element_line(color = sty$grid_color, linewidth = 0.3)
       } else {
-        ggplot2::element_blank()
+        element_blank()
       },
       panel.spacing   = grid::unit(0.8, "lines"),
       legend.position = legend_position,
-      plot.margin     = ggplot2::margin(15, 15, 15, 15)
+      legend.justification = "right",
+      plot.margin     = margin(15, 15, 15, 15)
     )
 
   # ---------------------------------------------------------------------------
   # Build plot
   # ---------------------------------------------------------------------------
-  p <- ggplot2::ggplot(df_plot)
+  p <- ggplot(df_plot)
 
-  p <- p + ggplot2::geom_segment(
+  # Spokes (always)
+  p <- p + geom_segment(
     data = spoke_df,
-    ggplot2::aes(x = .data$.cat, xend = .data$.cat, y = 0, yend = .data$.yend),
+    aes(x = .data$.cat, xend = .data$.cat, y = 0, yend = .data$.yend),
     linetype  = sty$spoke_linetype,
     color     = sty$spoke_color,
     linewidth = 0.4
   )
 
+  # Value axis line (at GAP)
+  # p <- p + geom_segment(
+  #   data = axis_df,
+  #   aes(x = .data$.cat, xend = .data$.cat, y = .data$.y, yend = .data$.yend),
+  #   linetype  = sty$spoke_linetype,
+  #   color     = sty$spoke_color,
+  #   linewidth = 0.4
+  # )
+
   bar_data <- dplyr::filter(df_plot, .data$.cat != "GAP", !is.na(.data$.val))
 
-  p <- p + ggplot2::geom_col(
+  p <- p + geom_col(
     data = bar_data,
-    ggplot2::aes(x = .data$.cat, y = .data$.val, fill = .data$.fill),
+    aes(x = .data$.cat, y = .data$.val, fill = .data$.fill),
     width       = sty$bar_width,
     color       = sty$bar_border_color,
     linewidth   = 0.3,
@@ -547,9 +545,9 @@ radial_plot <- function(
 
   if (show_value_labels) {
     if (exists("value_label_df") && nrow(value_label_df) > 0L) {
-      p <- p + ggplot2::geom_text(
+      p <- p + geom_text(
         data = value_label_df,
-        ggplot2::aes(x = .data$.cat, y = .data$.val, label = round(.data$.val, 1)),
+        aes(x = .data$.cat, y = .data$.val, label = round(.data$.val, 1)),
         size     = sty$value_label_size,
         vjust    = -0.5,
         fontface = "bold"
@@ -557,9 +555,9 @@ radial_plot <- function(
     }
   }
 
-  p <- p + ggplot2::geom_label(
+  p <- p + geom_label(
     data = label_df,
-    ggplot2::aes(x = .data$.cat, y = label_y, label = .data$.cat),
+    aes(x = .data$.cat, y = label_y, label = .data$.cat),
     fill          = "white",
     linewidth     = 0,
     label.padding = grid::unit(0.15, "lines"),
@@ -567,16 +565,19 @@ radial_plot <- function(
     fontface      = "bold"
   )
 
-  p <- p + ggplot2::geom_text(
+  # Tick labels along the GAP column
+  p <- p + geom_label(
     data = tick_df,
-    ggplot2::aes(x = .data$.cat, y = .data$.y, label = .data$.y),
+    aes(x = .data$.cat, y = .data$.y, label = .data$.y),
     size  = sty$tick_label_size,
+    fill = "white",
+    border.color = "white",
     color = "grey30"
   )
 
   p <- p +
-    ggplot2::scale_x_discrete(drop = FALSE) +
-    ggplot2::scale_y_continuous(
+    scale_x_discrete(drop = FALSE) +
+    scale_y_continuous(
       limits = c(radial_limits[1], y_outer),
       breaks = radial_breaks[radial_breaks > 0],
       expand = c(0, 0)
@@ -586,7 +587,7 @@ radial_plot <- function(
   # Fill scale
   # ---------------------------------------------------------------------------
   if (fill_is_discrete) {
-    p <- p + ggplot2::scale_fill_manual(
+    p <- p + scale_fill_manual(
       values       = palette,
       name         = legend_title,
       limits       = fill_levels_ord,
@@ -596,7 +597,7 @@ radial_plot <- function(
     )
   } else {
     if (length(palette) == 2L) {
-      p <- p + ggplot2::scale_fill_gradient(
+      p <- p + scale_fill_gradient(
         low      = palette[1L],
         high     = palette[2L],
         limits   = lims,
@@ -605,7 +606,7 @@ radial_plot <- function(
         na.value = na_color
       )
     } else {
-      p <- p + ggplot2::scale_fill_gradientn(
+      p <- p + scale_fill_gradientn(
         colors   = palette,
         limits   = lims,
         oob      = scales::squish,
@@ -615,14 +616,22 @@ radial_plot <- function(
     }
   }
 
-  p <- p + ggplot2::coord_polar(
+  # Legend colorbar size (works for continuous; ignored by discrete guides)
+  #p <- p + guides(
+  #  fill = guide_colorbar(
+  #    barwidth  = grid::unit(legend_barwidth_pt, "pt"),
+  #    barheight = grid::unit(legend_barheight_pt, "pt")
+  #  )
+  #)
+
+  p <- p + coord_polar(
     start     = (start_angle %% 360) * pi / 180,
     direction = direction,
     clip      = "off"
   )
 
   if (has_facet) {
-    p <- p + ggplot2::facet_wrap(~ .facet, nrow = facet_nrow)
+    p <- p + facet_wrap(~ .facet, nrow = facet_nrow)
   }
 
   p + base_theme

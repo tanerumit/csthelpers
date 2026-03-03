@@ -266,6 +266,8 @@ p <- radial_plot(
   na_handling = c("warn", "silent", "error") #keep
 )
 
+p
+
 ggsave("output/test3.png", height = 4, width = 8)
 
 #fill_mode = "binned",
