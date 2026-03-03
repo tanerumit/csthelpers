@@ -195,6 +195,90 @@
 }
 
 
+#' Styling options for climate_surface_base
+#'
+#' @description
+#' Creates a list of visual styling parameters for `climate_surface_base()`.
+#' All parameters have sensible defaults; only specify what you want to change.
+#'
+#' @param text_size Numeric scalar. Text size multiplier (> 0). Default 0.95.
+#' @param legend_barwidth_spec Numeric scalar. Legend bar width (> 0). Default 4.31.
+#' @param legend_barheight_spec Numeric scalar. Legend bar height (> 0). Default 0.25.
+#' @param col_failure Character. Failure color. Default "#df0000".
+#' @param col_safe Character. Safe color. Default "#0033FF".
+#' @param col_mid Character. Midpoint color. Default "#FFFFFF".
+#' @param col_fail_light Character. Light failure color. Default "#FEE5D9".
+#' @param col_safe_light Character. Light safe color. Default "#D6E3FF".
+#' @param legend_max_labels Integer. Maximum legend labels (>= 1). Default 14L.
+#' @param baseline_tol Numeric scalar. Baseline tolerance (> 0). Default 1e-6.
+#'
+#' @return A list of styling parameters.
+#'
+#' @export
+surface_style <- function(
+    text_size = 0.95,
+    legend_barwidth_spec = 4.31,
+    legend_barheight_spec = 0.25,
+    col_failure = "#df0000",
+    col_safe = "#0033FF",
+    col_mid = "#FFFFFF",
+    col_fail_light = "#FEE5D9",
+    col_safe_light = "#D6E3FF",
+    legend_max_labels = 14L,
+    baseline_tol = 1e-6
+) {
+
+  if (!is.numeric(text_size) || length(text_size) != 1L ||
+      !is.finite(text_size) || text_size <= 0) {
+    stop("'text_size' must be a single number > 0.", call. = FALSE)
+  }
+  if (!is.numeric(legend_barwidth_spec) || length(legend_barwidth_spec) != 1L ||
+      !is.finite(legend_barwidth_spec) || legend_barwidth_spec <= 0) {
+    stop("'legend_barwidth_spec' must be a positive numeric scalar.", call. = FALSE)
+  }
+  if (!is.numeric(legend_barheight_spec) || length(legend_barheight_spec) != 1L ||
+      !is.finite(legend_barheight_spec) || legend_barheight_spec <= 0) {
+    stop("'legend_barheight_spec' must be a positive numeric scalar.", call. = FALSE)
+  }
+  if (!is.numeric(legend_max_labels) || length(legend_max_labels) != 1L ||
+      !is.finite(legend_max_labels) || legend_max_labels < 1) {
+    stop("'legend_max_labels' must be a single number >= 1.", call. = FALSE)
+  }
+  if (!is.numeric(baseline_tol) || length(baseline_tol) != 1L ||
+      !is.finite(baseline_tol) || baseline_tol <= 0) {
+    stop("'baseline_tol' must be a single number > 0.", call. = FALSE)
+  }
+
+  .check_color <- function(x, nm) {
+    if (!is.character(x) || length(x) != 1L || is.na(x) || !nzchar(x)) {
+      stop("'", nm, "' must be a single non-empty character string.", call. = FALSE)
+    }
+  }
+
+  .check_color(col_failure, "col_failure")
+  .check_color(col_safe, "col_safe")
+  .check_color(col_mid, "col_mid")
+  .check_color(col_fail_light, "col_fail_light")
+  .check_color(col_safe_light, "col_safe_light")
+
+  structure(
+    list(
+      text_size = text_size,
+      legend_barwidth_spec = legend_barwidth_spec,
+      legend_barheight_spec = legend_barheight_spec,
+      col_failure = col_failure,
+      col_safe = col_safe,
+      col_mid = col_mid,
+      col_fail_light = col_fail_light,
+      col_safe_light = col_safe_light,
+      legend_max_labels = as.integer(legend_max_labels),
+      baseline_tol = baseline_tol
+    ),
+    class = "surface_style"
+  )
+}
+
+
 # -----------------------------------------------------------------------------
 # Main function: climate_surface_base
 # -----------------------------------------------------------------------------
@@ -216,12 +300,10 @@
 #' @param y_breaks Numeric vector. Custom y-axis breaks.
 #' @param n_contours Integer. Target number of contour levels.
 #' @param z_limits Numeric length-2. Optional limits for z-axis.
-#' @param legend_barwidth_spec Numeric. Legend bar width (fraction if <=1, inches if >1).
-#' @param legend_barheight_spec Numeric. Legend bar height (fraction if <=1, inches if >1).
-#' @param text_size Numeric. Text size multiplier.
 #' @param facet Logical. If TRUE, create faceted plot.
 #' @param facet_by Character. Column name for faceting.
 #' @param facet_levels Character vector. Subset and order of facet levels.
+#' @param style A `surface_style()` object controlling aesthetics and thresholds.
 #'
 #' @return A ggplot object with metadata attributes.
 #' @export
@@ -241,24 +323,16 @@ climate_surface_base <- function(
     y_breaks = NULL,
     n_contours = 15,
     z_limits = NULL,
-    legend_barwidth_spec = 4.31,
-    legend_barheight_spec = 0.25,
-    text_size = 0.95,
     facet = FALSE,
     facet_by = NULL,
-    facet_levels = NULL
+    facet_levels = NULL,
+    style = surface_style()
 ) {
 
+  if (!inherits(style, "surface_style")) style <- surface_style()
+  sty <- style
 
-  # Constants
-  BASELINE_TOL = 1e-6
-  LEGEND_MAX_LABELS <- 14L
-
-  COLOR_FAILURE <- "#df0000"
-  COLOR_SAFE <- "#0033FF"
-  COLOR_MID <- "#FFFFFF"
-  COLOR_FAIL_LIGHT <- "#FEE5D9"
-  COLOR_SAFE_LIGHT <- "#D6E3FF"
+  baseline_tol <- sty$baseline_tol
 
   # Input validation
   if (is.null(data) || !is.data.frame(data)) {
@@ -286,19 +360,9 @@ climate_surface_base <- function(
   }
 
   .assert_scalar_int_ge(n_contours, "n_contours", 3)
-  .assert_scalar_num(BASELINE_TOL, "BASELINE_TOL")
 
   if (!is.null(z_limits)) {
     .assert_limits(z_limits, "z_limits")
-  }
-
-  if (!is.numeric(legend_barwidth_spec) || length(legend_barwidth_spec) != 1 ||
-      !is.finite(legend_barwidth_spec) || legend_barwidth_spec <= 0) {
-    stop("'legend_barwidth_spec' must be a positive numeric scalar.", call. = FALSE)
-  }
-  if (!is.numeric(legend_barheight_spec) || length(legend_barheight_spec) != 1 ||
-      !is.finite(legend_barheight_spec) || legend_barheight_spec <= 0) {
-    stop("'legend_barheight_spec' must be a positive numeric scalar.", call. = FALSE)
   }
 
   if (isTRUE(facet)) {
@@ -361,13 +425,13 @@ climate_surface_base <- function(
   # Threshold inference
   if (is.null(threshold)) {
     baseline_idx <- which(
-      abs(data[[x_var]]) <= BASELINE_TOL &
-        abs(data[[y_var]]) <= BASELINE_TOL
+      abs(data[[x_var]]) <= baseline_tol &
+        abs(data[[y_var]]) <= baseline_tol
     )
     if (length(baseline_idx) == 0) {
       stop(
         "Cannot infer threshold: no baseline point found (x~0, y~0). ",
-        "Provide 'threshold' explicitly or adjust 'BASELINE_TOL'.",
+        "Provide 'threshold' explicitly or adjust 'baseline_tol'.",
         call. = FALSE
       )
     }
@@ -395,11 +459,11 @@ climate_surface_base <- function(
     rng = z_rng,
     thr = threshold,
     fail_dir = failure_dir,
-    col_failure = COLOR_FAILURE,
-    col_safe = COLOR_SAFE,
-    col_mid = COLOR_MID,
-    col_fail_light = COLOR_FAIL_LIGHT,
-    col_safe_light = COLOR_SAFE_LIGHT
+    col_failure = sty$col_failure,
+    col_safe = sty$col_safe,
+    col_mid = sty$col_mid,
+    col_fail_light = sty$col_fail_light,
+    col_safe_light = sty$col_safe_light
   )
 
   bin_mid <- 0.5 * (contour_breaks[-1] + contour_breaks[-length(contour_breaks)])
@@ -432,7 +496,7 @@ climate_surface_base <- function(
     1
   }
 
-  base_size <- 12 * text_size
+  base_size <- 12 * sty$text_size
 
   theme_surface <- theme_bw(base_size = base_size) +
     theme(
@@ -457,8 +521,8 @@ climate_surface_base <- function(
 
   guide_fill <- guide_coloursteps(
     direction = "horizontal",
-    barwidth  = grid::unit(legend_barwidth_spec, "in"),
-    barheight = grid::unit(legend_barheight_spec, "in"),
+    barwidth  = grid::unit(sty$legend_barwidth_spec, "in"),
+    barheight = grid::unit(sty$legend_barheight_spec, "in"),
     show.limits = TRUE,
     ticks = TRUE
   )
@@ -492,7 +556,7 @@ climate_surface_base <- function(
       values = values_use,
       limits = range(contour_breaks),
       breaks = contour_breaks,
-      labels = .make_legend_labeller(max_labels = LEGEND_MAX_LABELS),
+      labels = .make_legend_labeller(max_labels = sty$legend_max_labels),
       oob = scales::squish,
       guide = guide_fill
     ) +
@@ -508,8 +572,8 @@ climate_surface_base <- function(
   }
 
   # Attach metadata
-  attr(p, "legend_barwidth_spec")  <- legend_barwidth_spec
-  attr(p, "legend_barheight_spec") <- legend_barheight_spec
+  attr(p, "legend_barwidth_spec")  <- sty$legend_barwidth_spec
+  attr(p, "legend_barheight_spec") <- sty$legend_barheight_spec
   attr(p, "threshold")             <- threshold
   attr(p, "z_range")               <- z_rng
   attr(p, "contour_breaks")        <- contour_breaks
@@ -750,6 +814,68 @@ climate_surface_base <- function(
 }
 
 
+#' Styling options for climate_surface_gcm_overlay
+#'
+#' @description
+#' Creates a list of visual styling parameters for
+#' `climate_surface_gcm_overlay()`.
+#'
+#' @param spread_color Character. Line color for spread visualization. Default "gray30".
+#' @param spread_linetype Character. Line type for spread visualization. Default "dashed".
+#' @param spread_linewidth Numeric scalar. Line width for spread visualization (> 0). Default 0.5.
+#' @param kde_bw_method Character. Bandwidth method for KDE: "auto", "plugin", or "nrd".
+#' @param kde_n Integer. Grid resolution for KDE (>= 40). Default 120L.
+#' @param kde_bw_adjust Numeric scalar. Bandwidth adjustment factor (> 0). Default 1.0.
+#'
+#' @return A list of styling parameters.
+#'
+#' @export
+spread_style <- function(
+    spread_color = "gray30",
+    spread_linetype = "dashed",
+    spread_linewidth = 0.5,
+    kde_bw_method = c("auto", "plugin", "nrd"),
+    kde_n = 120L,
+    kde_bw_adjust = 1.0
+) {
+
+  if (!is.character(spread_color) || length(spread_color) != 1L ||
+      is.na(spread_color) || !nzchar(spread_color)) {
+    stop("'spread_color' must be a single non-empty character string.", call. = FALSE)
+  }
+  if (!is.character(spread_linetype) || length(spread_linetype) != 1L ||
+      is.na(spread_linetype) || !nzchar(spread_linetype)) {
+    stop("'spread_linetype' must be a single non-empty character string.", call. = FALSE)
+  }
+  if (!is.numeric(spread_linewidth) || length(spread_linewidth) != 1L ||
+      !is.finite(spread_linewidth) || spread_linewidth <= 0) {
+    stop("'spread_linewidth' must be a single number > 0.", call. = FALSE)
+  }
+
+  kde_bw_method <- match.arg(kde_bw_method)
+
+  if (!is.numeric(kde_n) || length(kde_n) != 1L || !is.finite(kde_n) || kde_n < 40L) {
+    stop("'kde_n' must be a single integer >= 40.", call. = FALSE)
+  }
+  if (!is.numeric(kde_bw_adjust) || length(kde_bw_adjust) != 1L ||
+      !is.finite(kde_bw_adjust) || kde_bw_adjust <= 0) {
+    stop("'kde_bw_adjust' must be a single number > 0.", call. = FALSE)
+  }
+
+  structure(
+    list(
+      spread_color = spread_color,
+      spread_linetype = spread_linetype,
+      spread_linewidth = spread_linewidth,
+      kde_bw_method = kde_bw_method,
+      kde_n = as.integer(kde_n),
+      kde_bw_adjust = kde_bw_adjust
+    ),
+    class = "spread_style"
+  )
+}
+
+
 #' Overlay GCM information on a climate response surface plot
 #'
 #' @description
@@ -864,30 +990,8 @@ climate_surface_base <- function(
 #'         scenario--horizon combination.
 #' }
 #'
-#' @param spread_color
-#' Line color for spread visualization.
-#'
-#' @param spread_linetype
-#' Line type for spread visualization (e.g. \code{"dashed"}, \code{"solid"}).
-#'
-#' @param spread_linewidth
-#' Line width for spread visualization.
-#'
-#' @param kde_bw_method
-#' Bandwidth selection method for KDE (only used when \code{spread_method = "kde"}):
-#' \itemize{
-#'   \item \code{"auto"}: Try plug-in first, fall back to NRD.
-#'   \item \code{"plugin"}: Full 2D plug-in bandwidth via \code{ks::Hpi()}.
-#'   \item \code{"nrd"}: Normal reference distribution via \code{MASS::bandwidth.nrd()}.
-#' }
-#'
-#' @param kde_n
-#' Grid resolution for KDE (integer >= 40). Only used when
-#' \code{spread_method = "kde"}.
-#'
-#' @param kde_bw_adjust
-#' Bandwidth adjustment factor for KDE (multiplier > 0). Only used when
-#' \code{spread_method = "kde"}.
+#' @param spread_sty
+#' A `spread_style()` object controlling spread and KDE aesthetics.
 #'
 #' @return
 #' A ggplot object consisting of the original climate response surface with
@@ -947,19 +1051,15 @@ climate_surface_gcm_overlay <- function(
     spread_method = c("none", "ellipse_norm", "ellipse_robust", "kde"),
     spread_levels = NULL,
     spread_group = c("none", "scenario", "horizon", "scenario_horizon"),
-    spread_color = "gray30",
-    spread_linetype = "dashed",
-    spread_linewidth = 0.5,
-    # KDE-specific parameters
-    kde_bw_method = c("auto", "plugin", "nrd"),
-    kde_n = 120L,
-    kde_bw_adjust = 1.0
+    spread_sty = spread_style()
 ) {
 
   # Match arguments
   spread_method <- match.arg(spread_method)
   spread_group <- match.arg(spread_group)
-  kde_bw_method <- match.arg(kde_bw_method)
+
+  if (!inherits(spread_sty, "spread_style")) spread_sty <- spread_style()
+  ssty <- spread_sty
 
   # ---------------------------------------------------------------------------
   # Validation
@@ -1014,17 +1114,6 @@ climate_surface_gcm_overlay <- function(
   if (spread_method != "none" && is.null(spread_levels)) {
     warning("'spread_method' is set but 'spread_levels' is NULL; no spread visualization will be drawn.",
             call. = FALSE)
-  }
-
-  # Validate KDE-specific parameters
-  if (!is.numeric(kde_n) || length(kde_n) != 1L || !is.finite(kde_n) || kde_n < 40L) {
-    stop("'kde_n' must be a single integer >= 40.", call. = FALSE)
-  }
-  kde_n <- as.integer(kde_n)
-
-  if (!is.numeric(kde_bw_adjust) || length(kde_bw_adjust) != 1L ||
-      !is.finite(kde_bw_adjust) || kde_bw_adjust <= 0) {
-    stop("'kde_bw_adjust' must be a single number > 0.", call. = FALSE)
   }
 
   # ---------------------------------------------------------------------------
@@ -1126,9 +1215,9 @@ climate_surface_gcm_overlay <- function(
             mapping = aes(x = .data[[x_var]], y = .data[[y_var]]),
             level = lv,
             type = "norm",
-            color = spread_color,
-            linetype = spread_linetype,
-            linewidth = spread_linewidth
+            color = ssty$spread_color,
+            linetype = ssty$spread_linetype,
+            linewidth = ssty$spread_linewidth
           )
         }
       } else {
@@ -1142,9 +1231,9 @@ climate_surface_gcm_overlay <- function(
             ),
             level = lv,
             type = "norm",
-            color = spread_color,
-            linetype = spread_linetype,
-            linewidth = spread_linewidth
+            color = ssty$spread_color,
+            linetype = ssty$spread_linetype,
+            linewidth = ssty$spread_linewidth
           )
         }
       }
@@ -1181,9 +1270,9 @@ climate_surface_gcm_overlay <- function(
           data = ell_df,
           mapping = aes(x = .data[["x"]], y = .data[["y"]], group = .data[["piece"]]),
           inherit.aes = FALSE,
-          color = spread_color,
-          linetype = spread_linetype,
-          linewidth = spread_linewidth
+          color = ssty$spread_color,
+          linetype = ssty$spread_linetype,
+          linewidth = ssty$spread_linewidth
         )
       }
 
@@ -1201,9 +1290,9 @@ climate_surface_gcm_overlay <- function(
           x = sub[[x_var]],
           y = sub[[y_var]],
           mass_levels = sort(unique(spread_levels)),
-          n = kde_n,
-          bw_method = kde_bw_method,
-          bw_adjust = kde_bw_adjust
+          n = ssty$kde_n,
+          bw_method = ssty$kde_bw_method,
+          bw_adjust = ssty$kde_bw_adjust
         )
 
         if (is.null(d) || nrow(d) == 0L) next
@@ -1220,9 +1309,9 @@ climate_surface_gcm_overlay <- function(
           data = kde_df,
           mapping = aes(x = .data[["x"]], y = .data[["y"]], group = .data[["piece"]]),
           inherit.aes = FALSE,
-          color = spread_color,
-          linetype = spread_linetype,
-          linewidth = spread_linewidth
+          color = ssty$spread_color,
+          linetype = ssty$spread_linetype,
+          linewidth = ssty$spread_linewidth
         )
       }
     }
@@ -1254,4 +1343,3 @@ climate_surface_gcm_overlay <- function(
 
   p2
 }
-
