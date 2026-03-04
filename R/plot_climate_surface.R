@@ -10,11 +10,18 @@
   invisible(TRUE)
 }
 
-.assert_scalar_num <- function(x, nm) {
-  if (!is.numeric(x) || length(x) != 1 || !is.finite(x)) {
+.assert_scalar_range <- function(x, nm, lo = -Inf, hi = Inf) {
+  if (!is.numeric(x) || length(x) != 1L || !is.finite(x)) {
     stop("'", nm, "' must be a single finite numeric value.", call. = FALSE)
   }
+  if (x < lo || x > hi) {
+    stop("'", nm, "' must be between ", lo, " and ", hi, ".", call. = FALSE)
+  }
   invisible(TRUE)
+}
+
+.assert_scalar_num <- function(x, nm) {
+  .assert_scalar_range(x, nm)
 }
 
 .assert_limits <- function(x, nm) {
@@ -23,20 +30,6 @@
   }
   invisible(TRUE)
 }
-
-#' Enforce strict monotonicity on a numeric vector
-#' @keywords internal
-.enforce_strict_monotonic <- function(x, eps = 1e-9) {
-  n <- length(x)
-  if (n < 2L) return(x)
-  for (i in 2L:n) {
-    if (x[i] <= x[i - 1L]) {
-      x[i] <- x[i - 1L] + eps
-    }
-  }
-  x
-}
-
 
 #' Generate "nice" bracketed breaks for contours
 #' @keywords internal
@@ -209,7 +202,7 @@
 #' @param col_mid Character. Midpoint color. Default "#FFFFFF".
 #' @param col_fail_light Character. Light failure color. Default "#FEE5D9".
 #' @param col_safe_light Character. Light safe color. Default "#D6E3FF".
-#' @param legend_max_labels Integer. Maximum legend labels (>= 1). Default 14L.
+#' @param legend_max_labels Integer. Maximum legend labels (>= 2). Default 14L.
 #' @param baseline_tol Numeric scalar. Baseline tolerance (> 0). Default 1e-6.
 #'
 #' @return A list of styling parameters.
@@ -228,26 +221,19 @@ surface_style <- function(
     baseline_tol = 1e-6
 ) {
 
-  if (!is.numeric(text_size) || length(text_size) != 1L ||
-      !is.finite(text_size) || text_size <= 0) {
-    stop("'text_size' must be a single number > 0.", call. = FALSE)
-  }
-  if (!is.numeric(legend_barwidth_spec) || length(legend_barwidth_spec) != 1L ||
-      !is.finite(legend_barwidth_spec) || legend_barwidth_spec <= 0) {
-    stop("'legend_barwidth_spec' must be a positive numeric scalar.", call. = FALSE)
-  }
-  if (!is.numeric(legend_barheight_spec) || length(legend_barheight_spec) != 1L ||
-      !is.finite(legend_barheight_spec) || legend_barheight_spec <= 0) {
-    stop("'legend_barheight_spec' must be a positive numeric scalar.", call. = FALSE)
-  }
-  if (!is.numeric(legend_max_labels) || length(legend_max_labels) != 1L ||
-      !is.finite(legend_max_labels) || legend_max_labels < 1) {
-    stop("'legend_max_labels' must be a single number >= 1.", call. = FALSE)
-  }
-  if (!is.numeric(baseline_tol) || length(baseline_tol) != 1L ||
-      !is.finite(baseline_tol) || baseline_tol <= 0) {
-    stop("'baseline_tol' must be a single number > 0.", call. = FALSE)
-  }
+  .assert_scalar_range(text_size, "text_size", lo = .Machine$double.eps)
+  .assert_scalar_range(
+    legend_barwidth_spec,
+    "legend_barwidth_spec",
+    lo = .Machine$double.eps
+  )
+  .assert_scalar_range(
+    legend_barheight_spec,
+    "legend_barheight_spec",
+    lo = .Machine$double.eps
+  )
+  .assert_scalar_int_ge(legend_max_labels, "legend_max_labels", 2L)
+  .assert_scalar_range(baseline_tol, "baseline_tol", lo = .Machine$double.eps)
 
   .check_color <- function(x, nm) {
     if (!is.character(x) || length(x) != 1L || is.na(x) || !nzchar(x)) {
@@ -466,26 +452,11 @@ climate_surface_base <- function(
     col_safe_light = sty$col_safe_light
   )
 
-  bin_mid <- 0.5 * (contour_breaks[-1] + contour_breaks[-length(contour_breaks)])
-  bin_vals <- scales::rescale(bin_mid, from = z_rng)
+  values_use <- scales::rescale(contour_breaks, from = z_rng)
+  colors_use <- c(bin_cols[1], bin_cols)
 
-  eps <- 1e-9
-  bin_vals <- cummax(bin_vals + seq_along(bin_vals) * eps)
-
-  values_use <- c(0, pmin(pmax(bin_vals, 0), 1), 1)
-  colors_use <- c(bin_cols[1], bin_cols, bin_cols[length(bin_cols)])
-
-  ord <- order(values_use)
-  values_use <- values_use[ord]
-  colors_use <- colors_use[ord]
-
-  keep <- !duplicated(values_use, fromLast = TRUE)
-  values_use <- values_use[keep]
-  colors_use <- colors_use[keep]
-
-  # Final monotonicity enforcement and clamping
-  values_use <- .enforce_strict_monotonic(values_use, eps = 1e-9)
-  values_use <- pmin(values_use, 1)
+  stopifnot(length(values_use) == length(colors_use))
+  stopifnot(all(diff(values_use) > 0))
 
   # Theme and styling
   x_span <- diff(range(x_breaks))
@@ -847,20 +818,12 @@ spread_style <- function(
       is.na(spread_linetype) || !nzchar(spread_linetype)) {
     stop("'spread_linetype' must be a single non-empty character string.", call. = FALSE)
   }
-  if (!is.numeric(spread_linewidth) || length(spread_linewidth) != 1L ||
-      !is.finite(spread_linewidth) || spread_linewidth <= 0) {
-    stop("'spread_linewidth' must be a single number > 0.", call. = FALSE)
-  }
+  .assert_scalar_range(spread_linewidth, "spread_linewidth", lo = .Machine$double.eps)
 
   kde_bw_method <- match.arg(kde_bw_method)
 
-  if (!is.numeric(kde_n) || length(kde_n) != 1L || !is.finite(kde_n) || kde_n < 40L) {
-    stop("'kde_n' must be a single integer >= 40.", call. = FALSE)
-  }
-  if (!is.numeric(kde_bw_adjust) || length(kde_bw_adjust) != 1L ||
-      !is.finite(kde_bw_adjust) || kde_bw_adjust <= 0) {
-    stop("'kde_bw_adjust' must be a single number > 0.", call. = FALSE)
-  }
+  .assert_scalar_int_ge(kde_n, "kde_n", 40L)
+  .assert_scalar_range(kde_bw_adjust, "kde_bw_adjust", lo = .Machine$double.eps)
 
   structure(
     list(
@@ -1098,9 +1061,9 @@ climate_surface_gcm_overlay <- function(
   }
 
   # Validate scalar parameters
-  if (!is.numeric(alpha) || length(alpha) != 1L || !is.finite(alpha) || alpha < 0 || alpha > 1) {
-    stop("'alpha' must be a single number in [0,1].", call. = FALSE)
-  }
+  .assert_scalar_range(alpha, "alpha", 0, 1)
+  .assert_scalar_range(size, "size", lo = 0)
+  .assert_scalar_range(stroke, "stroke", lo = 0)
 
   # Validate spread_levels if spread visualization is requested
   if (spread_method != "none" && !is.null(spread_levels)) {
