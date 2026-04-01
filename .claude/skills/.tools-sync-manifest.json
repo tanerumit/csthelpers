@@ -1,0 +1,107 @@
+{
+  "entries": [
+    {
+      "item_name": "r-coding",
+      "item_type": "skill",
+      "mode": "symlink",
+      "relative_path": "r-coding",
+      "source_path": "C:\\Users\\taner\\WS\\_shared\\skills\\r-coding",
+      "target_path": "C:\\Users\\taner\\WS\\csthelpers\\.claude\\skills\\r-coding",
+      "updated_at": "2026-03-27T12:42:29.297603+00:00"
+    },
+    {
+      "item_name": "r-oop",
+      "item_type": "skill",
+      "mode": "symlink",
+      "relative_path": "r-oop",
+      "source_path": "C:\\Users\\taner\\WS\\_shared\\external\\claude-code-r-skills\\.claude\\skills\\r-oop",
+      "target_path": "C:\\Users\\taner\\WS\\csthelpers\\.claude\\skills\\r-oop",
+      "updated_at": "2026-03-27T12:42:32.914154+00:00"
+    },
+    {
+      "item_name": "r-package-development",
+      "item_type": "skill",
+      "mode": "symlink",
+      "relative_path": "r-package-development",
+      "source_path": "C:\\Users\\taner\\WS\\_shared\\external\\claude-code-r-skills\\.claude\\skills\\r-package-development",
+      "target_path": "C:\\Users\\taner\\WS\\csthelpers\\.claude\\skills\\r-package-development",
+      "updated_at": "2026-03-27T12:42:36.493030+00:00"
+    },
+    {
+      "item_name": "r-performance",
+      "item_type": "skill",
+      "mode": "symlink",
+      "relative_path": "r-performance",
+      "source_path": "C:\\Users\\taner\\WS\\_shared\\external\\claude-code-r-skills\\.claude\\skills\\r-performance",
+      "target_path": "C:\\Users\\taner\\WS\\csthelpers\\.claude\\skills\\r-performance",
+      "updated_at": "2026-03-27T12:42:39.809606+00:00"
+    },
+    {
+      "item_name": "r-style-guide",
+      "item_type": "skill",
+      "mode": "symlink",
+      "relative_path": "r-style-guide",
+      "source_path": "C:\\Users\\taner\\WS\\_shared\\external\\claude-code-r-skills\\.claude\\skills\\r-style-guide",
+      "target_path": "C:\\Users\\taner\\WS\\csthelpers\\.claude\\skills\\r-style-guide",
+      "updated_at": "2026-03-27T12:42:43.051344+00:00"
+    },
+    {
+      "item_name": "r-vignettes",
+      "item_type": "skill",
+      "mode": "symlink",
+      "relative_path": "r-vignettes",
+      "source_path": "C:\\Users\\taner\\WS\\_shared\\skills\\r-vignettes",
+      "target_path": "C:\\Users\\taner\\WS\\csthelpers\\.claude\\skills\\r-vignettes",
+      "updated_at": "2026-03-27T12:42:45.847803+00:00"
+    },
+    {
+      "item_name": "rlang-patterns",
+      "item_type": "skill",
+      "mode": "symlink",
+      "relative_path": "rlang-patterns",
+      "source_path": "C:\\Users\\taner\\WS\\_shared\\external\\claude-code-r-skills\\.claude\\skills\\rlang-patterns",
+      "target_path": "C:\\Users\\taner\\WS\\csthelpers\\.claude\\skills\\rlang-patterns",
+      "updated_at": "2026-03-27T12:42:49.195113+00:00"
+    },
+    {
+      "item_name": "tdd-workflow",
+      "item_type": "skill",
+      "mode": "symlink",
+      "relative_path": "tdd-workflow",
+      "source_path": "C:\\Users\\taner\\WS\\_shared\\skills\\external\\claude-code-r-skills\\.claude\\skills\\tdd-workflow",
+      "target_path": "C:\\Users\\taner\\WS\\csthelpers\\.claude\\skills\\tdd-workflow",
+      "updated_at": "2026-03-30T18:16:29.230940+00:00"
+    },
+    {
+      "item_name": "tidyverse-patterns",
+      "item_type": "skill",
+      "mode": "symlink",
+      "relative_path": "tidyverse-patterns",
+      "source_path": "C:\\Users\\taner\\WS\\_shared\\skills\\external\\claude-code-r-skills\\.claude\\skills\\tidyverse-patterns",
+      "target_path": "C:\\Users\\taner\\WS\\csthelpers\\.claude\\skills\\tidyverse-patterns",
+      "updated_at": "2026-03-30T18:16:29.645334+00:00"
+    },
+    {
+      "item_name": "receiving-code-review",
+      "item_type": "skill",
+      "mode": "symlink",
+      "relative_path": "receiving-code-review",
+      "source_path": "C:\\Users\\taner\\WS\\_shared\\skills\\external\\superpowers\\skills\\receiving-code-review",
+      "target_path": "C:\\Users\\taner\\WS\\csthelpers\\.claude\\skills\\receiving-code-review",
+      "updated_at": "2026-03-30T18:16:30.053458+00:00"
+    },
+    {
+      "item_name": "requesting-code-review",
+      "item_type": "skill",
+      "mode": "symlink",
+      "relative_path": "requesting-code-review",
+      "source_path": "C:\\Users\\taner\\WS\\_shared\\skills\\external\\superpowers\\skills\\requesting-code-review",
+      "target_path": "C:\\Users\\taner\\WS\\csthelpers\\.claude\\skills\\requesting-code-review",
+      "updated_at": "2026-03-30T18:16:30.658296+00:00"
+    }
+  ],
+  "managed_root": "c:\\users\\taner\\ws\\csthelpers\\.claude\\skills",
+  "schema_version": 1,
+  "tool": "tools_sync.cli",
+  "updated_at": "2026-03-30T18:16:30.658308+00:00"
+}

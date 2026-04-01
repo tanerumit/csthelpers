@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "item_name": "finding-duplicate-functions",
+      "item_type": "skill",
+      "mode": "symlink",
+      "relative_path": "finding-duplicate-functions",
+      "source_path": "C:\\Users\\taner\\WS\\_shared\\skills\\external\\superpowers-lab\\skills\\finding-duplicate-functions",
+      "target_path": "C:\\Users\\taner\\WS\\csthelpers\\.agents\\skills\\finding-duplicate-functions",
+      "updated_at": "2026-03-31T15:46:06.685783+00:00"
+    }
+  ],
+  "managed_root": "c:\\users\\taner\\ws\\csthelpers\\.agents\\skills",
+  "schema_version": 1,
+  "tool": "sync_ai_skills.cli",
+  "updated_at": "2026-03-31T15:46:06.685787+00:00"
+}
